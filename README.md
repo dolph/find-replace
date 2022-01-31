@@ -4,7 +4,7 @@ A fast find &amp; replace shell command.
 
 ## Goal
 
-The goal of this project is to improve on a bash snippet that I've relied on for years, by making something faster. The bash:
+The goal of this project is to improve on a bash snippet that I've relied on for years, by making it faster. The bash:
 
 ```bash
 #!/bin/bash
