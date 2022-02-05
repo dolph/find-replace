@@ -24,6 +24,8 @@ type findReplace struct {
 // path: the relative path to a specific file or directory, including both dirName and baseName
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
 	if len(os.Args) != 3 {
 		log.Print("usage: fr FIND REPLACE")
 	}
@@ -36,11 +38,12 @@ func main() {
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
 	// path.filepath.WalkDir() won't work here because it walks files
-	// alphabetically, breadth-first (and you'd be renaming files that you haven't explored yet).
-	fr.WalkDir(".", ".")
+	// alphabetically, breadth-first (and you'd be renaming files that you
+	// haven't explored yet).
+	fr.WalkDir(".")
 }
 
-func (fr *findReplace) WalkDir(baseDir string, path string) {
+func (fr *findReplace) WalkDir(path string) {
 	// List the files in this path.
 	files, err := os.ReadDir(path)
 	if err != nil {
@@ -49,23 +52,16 @@ func (fr *findReplace) WalkDir(baseDir string, path string) {
 
 	for _, file := range files {
 		if file.Name() != ".git" {
-			dirName := ""
-			if baseDir != "." {
-				dirName = baseDir + string(os.PathSeparator) + path
-			} else {
-				dirName = path
-			}
-
 			// If file is a directory, recurse immediately (depth-first).
 			if file.IsDir() {
-				fr.WalkDir(dirName, file.Name())
+				fr.WalkDir(path + string(os.PathSeparator) + file.Name())
 			} else {
 				// Replace the contents of regular files
-				fr.ReplaceContents(dirName, file)
+				fr.ReplaceContents(path, file)
 			}
 
 			// Rename the file now that we're otherwise done with it
-			fr.RenameFile(dirName, file)
+			fr.RenameFile(path, file)
 		}
 	}
 }
@@ -89,10 +85,12 @@ func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
 }
 
 func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
+	path := dirName + string(os.PathSeparator) + file.Name()
+
 	// Find & replace contents of file
-	f, err := os.Open(dirName + string(os.PathSeparator) + file.Name())
+	f, err := os.Open(path)
 	if err != nil {
-		log.Fatal("Unable to open "+dirName+string(os.PathSeparator)+file.Name(), err)
+		log.Fatal("Unable to open "+path, err)
 	}
 	defer f.Close()
 	builder := new(strings.Builder)
@@ -100,13 +98,12 @@ func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
 	str := builder.String()
 	if strings.Contains(str, fr.find) {
 		content := strings.Replace(builder.String(), fr.find, fr.replace, -1)
-		tmpfile, err := ioutil.TempFile(dirName, randomString(8))
+		tmpfile, err := ioutil.TempFile(dirName, randomString(20))
 		if err != nil {
 			log.Print("Error creating tempfile")
 			log.Fatal(err)
 		}
-
-		defer os.Rename(tmpfile.Name(), file.Name())
+		log.Print(tmpfile.Name())
 
 		if _, err := tmpfile.WriteString(content); err != nil {
 			log.Print("Error writing to tempfile")
@@ -116,12 +113,17 @@ func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
 			log.Print("Error closing tempfile")
 			log.Fatal(err)
 		}
+
+		os.Rename(tmpfile.Name(), path)
 	}
 }
 
-func randomString(length int) string {
-	rand.Seed(time.Now().UnixNano())
-	b := make([]byte, length)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)[:length]
+var characters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+func randomString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = characters[rand.Intn(len(characters))]
+	}
+	return string(b)
 }
