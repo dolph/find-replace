@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -23,24 +21,36 @@ func main() {
 	replace := os.Args[2]
 
 	fr := findReplace{find: find, replace: replace}
-	filepath.WalkDir(".", fr.Walk)
+
+	// Recursively explore the hierarchy depth first, rewrite files as needed,
+	// and rename files last (after we don't have to revisit them).
+	// path.filepath.WalkDir() won't work here because it walks files
+	// alphabetically, breadth-first (and you'd be renaming files that you haven't explored yet).
+	fr.WalkDir("", ".")
 }
 
-func (fr *findReplace) Walk(path string, info fs.DirEntry, err error) error {
+func (fr *findReplace) WalkDir(baseDir string, path string) {
+	// List the files in this path.
+	files, err := os.ReadDir(path)
 	if err != nil {
 		log.Fatal(err)
-		return err
-	}
-	if info.IsDir() && info.Name() == ".git" {
-		return fs.SkipDir
 	}
 
-	// Rename file
-	newPath := strings.Replace(path, fr.find, fr.replace, -1)
-	os.Rename(path, newPath)
+	for _, file := range files {
+		if file.Name() != ".git" {
+			if file.IsDir() {
+				fr.WalkDir(baseDir+string(os.PathSeparator)+path, file.Name())
+			}
 
-	if !info.IsDir() {
-		fmt.Println(newPath)
+			// Rename the file now that we're otherwise done with it
+			newName := strings.Replace(file.Name(), fr.find, fr.replace, -1)
+			if file.Name() != newName {
+				fmt.Printf("%v%v%v -> %v%v%v\n", path, string(os.PathSeparator), file.Name(), path, string(os.PathSeparator), newName)
+				os.Rename(path+string(os.PathSeparator)+file.Name(), path+string(os.PathSeparator)+newName)
+			} else {
+				fmt.Printf("%v%v%v\n", path, string(os.PathSeparator), file.Name())
+			}
+
+		}
 	}
-	return nil
 }
