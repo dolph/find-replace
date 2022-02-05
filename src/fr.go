@@ -18,6 +18,11 @@ type findReplace struct {
 	replace string
 }
 
+// ** Variable terminology **
+// dirName: the name of a directory, without a trailing separator
+// baseName: the relative name of a file, without a directory
+// path: the relative path to a specific file or directory, including both dirName and baseName
+
 func main() {
 	if len(os.Args) != 3 {
 		log.Print("usage: fr FIND REPLACE")
