@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -53,9 +54,12 @@ func (fr *findReplace) WalkDir(baseDir string, path string) {
 			// Rename the file now that we're otherwise done with it
 			newName := strings.Replace(file.Name(), fr.find, fr.replace, -1)
 			if file.Name() != newName {
-				// TODO: abort if destination file already exists
 				fmt.Printf("%v%v%v -> %v%v%v\n", path, string(os.PathSeparator), file.Name(), path, string(os.PathSeparator), newName)
-				os.Rename(path+string(os.PathSeparator)+file.Name(), path+string(os.PathSeparator)+newName)
+				if _, err := os.Stat(path + string(os.PathSeparator) + newName); errors.Is(err, os.ErrNotExist) {
+					os.Rename(path+string(os.PathSeparator)+file.Name(), path+string(os.PathSeparator)+newName)
+				} else {
+					log.Print("Refusing to rename " + path + string(os.PathSeparator) + file.Name() + " to " + newName + " because the destination already exists.")
+				}
 			} else {
 				fmt.Printf("%v%v%v\n", path, string(os.PathSeparator), file.Name())
 			}
