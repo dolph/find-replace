@@ -44,59 +44,67 @@ func (fr *findReplace) WalkDir(baseDir string, path string) {
 
 	for _, file := range files {
 		if file.Name() != ".git" {
-			// If this a directory, recurse immediately (depth-first).
-			if file.IsDir() {
-				fr.WalkDir(baseDir+string(os.PathSeparator)+path, file.Name())
-			}
+			dirName := baseDir + string(os.PathSeparator) + path
 
-			fr.ReplaceContents(baseDir+string(os.PathSeparator)+path, file)
+			// If file is a directory, recurse immediately (depth-first).
+			if file.IsDir() {
+				fr.WalkDir(dirName, file.Name())
+			} else {
+				// Replace the contents of regular files
+				fr.ReplaceContents(dirName, file)
+			}
 
 			// Rename the file now that we're otherwise done with it
-			newName := strings.Replace(file.Name(), fr.find, fr.replace, -1)
-			if file.Name() != newName {
-				fmt.Printf("%v%v%v -> %v%v%v\n", path, string(os.PathSeparator), file.Name(), path, string(os.PathSeparator), newName)
-				if _, err := os.Stat(path + string(os.PathSeparator) + newName); errors.Is(err, os.ErrNotExist) {
-					os.Rename(path+string(os.PathSeparator)+file.Name(), path+string(os.PathSeparator)+newName)
-				} else {
-					log.Print("Refusing to rename " + path + string(os.PathSeparator) + file.Name() + " to " + newName + " because the destination already exists.")
-				}
-			} else {
-				fmt.Printf("%v%v%v\n", path, string(os.PathSeparator), file.Name())
-			}
-
+			fr.RenameFile(file)
 		}
+	}
+}
+
+// Renames a file if the destination does not already exist.
+func (fr *findReplace) RenameFile(file fs.DirEntry) {
+	oldPath := path + string(os.PathSeparator) + file.Name()
+	newBaseName := strings.Replace(file.Name(), fr.find, fr.replace, -1)
+	newPath := path + string(os.PathSeparator) + newBaseName
+
+	if file.Name() != newBaseName {
+		fmt.Printf("%v -> %v\n", oldPath, newPath)
+		if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
+			os.Rename(oldPath, newPath)
+		} else {
+			log.Print("Refusing to rename " + oldPath + " to " + newBaseName + " because " + newPath + " already exists.")
+		}
+	} else {
+		fmt.Printf("%v\n", oldPath)
 	}
 }
 
 func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
 	// Find & replace contents of file
-	if !file.IsDir() {
-		f, err := os.Open(dirName + string(os.PathSeparator) + file.Name())
+	f, err := os.Open(dirName + string(os.PathSeparator) + file.Name())
+	if err != nil {
+		log.Fatal("Unable to open "+dirName+string(os.PathSeparator)+file.Name(), err)
+	}
+	defer f.Close()
+	builder := new(strings.Builder)
+	io.Copy(builder, f)
+	str := builder.String()
+	if strings.Contains(str, fr.find) {
+		content := strings.Replace(builder.String(), fr.find, fr.replace, -1)
+		tmpfile, err := ioutil.TempFile(dirName, randomString(8))
 		if err != nil {
-			log.Fatal("Unable to open "+dirName+string(os.PathSeparator)+file.Name(), err)
+			log.Print("Error creating tempfile")
+			log.Fatal(err)
 		}
-		defer f.Close()
-		builder := new(strings.Builder)
-		io.Copy(builder, f)
-		str := builder.String()
-		if strings.Contains(str, fr.find) {
-			content := strings.Replace(builder.String(), fr.find, fr.replace, -1)
-			tmpfile, err := ioutil.TempFile(dirName, randomString(8))
-			if err != nil {
-				log.Print("Error creating tempfile")
-				log.Fatal(err)
-			}
 
-			defer os.Rename(tmpfile.Name(), file.Name())
+		defer os.Rename(tmpfile.Name(), file.Name())
 
-			if _, err := tmpfile.WriteString(content); err != nil {
-				log.Print("Error writing to tempfile")
-				log.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				log.Print("Error closing tempfile")
-				log.Fatal(err)
-			}
+		if _, err := tmpfile.WriteString(content); err != nil {
+			log.Print("Error writing to tempfile")
+			log.Fatal(err)
+		}
+		if err := tmpfile.Close(); err != nil {
+			log.Print("Error closing tempfile")
+			log.Fatal(err)
 		}
 	}
 }
