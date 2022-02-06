@@ -22,10 +22,12 @@ type findReplace struct {
 // path: the relative path to a specific file or directory, including both dirName and baseName
 
 func main() {
+	// Remove date/time from logging output
+	log.SetFlags(0)
 	rand.Seed(time.Now().UnixNano())
 
 	if len(os.Args) != 3 {
-		log.Fatal("usage: find-replace FIND REPLACE")
+		log.Fatal("Usage: find-replace FIND REPLACE")
 	}
 
 	find := os.Args[1]
