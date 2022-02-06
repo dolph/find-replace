@@ -52,7 +52,55 @@ func TestReplaceContents(t *testing.T) {
 
 	dirName, f_info, path := createTestFile("", "*", initial)
 	defer os.Remove(path)
-	fr := findReplace{find: "ph", replace: "f"}
+	fr := findReplace{find: find, replace: replace}
+	fr.ReplaceContents(dirName, f_info)
+	got := readFile(path)
+	if got != want {
+		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
+	}
+}
+
+func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
+	initial := "alphaalpha"
+	find := "ph"
+	replace := "f"
+	want := "alfaalfa"
+
+	dirName, f_info, path := createTestFile("", "*", initial)
+	defer os.Remove(path)
+	fr := findReplace{find: find, replace: replace}
+	fr.ReplaceContents(dirName, f_info)
+	got := readFile(path)
+	if got != want {
+		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
+	}
+}
+
+func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
+	initial := "alpha\nalpha"
+	find := "ph"
+	replace := "f"
+	want := "alfa\nalfa"
+
+	dirName, f_info, path := createTestFile("", "*", initial)
+	defer os.Remove(path)
+	fr := findReplace{find: find, replace: replace}
+	fr.ReplaceContents(dirName, f_info)
+	got := readFile(path)
+	if got != want {
+		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
+	}
+}
+
+func TestReplaceContentsNoMatches(t *testing.T) {
+	initial := "alpha"
+	find := "abc"
+	replace := "xyz"
+	want := "alpha"
+
+	dirName, f_info, path := createTestFile("", "*", initial)
+	defer os.Remove(path)
+	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(dirName, f_info)
 	got := readFile(path)
 	if got != want {
