@@ -15,7 +15,7 @@ Renaming ./alphabet to betabet
 * Searches are performed recursively from the current working directory.
 * Searches are case sensitive.
 * `.git/` directories are skipped.
-* File types are ignored.
+* Binary files are ignored.
 
 ## Goal
 

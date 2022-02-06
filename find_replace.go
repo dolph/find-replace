@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/tools/godoc/util"
 )
 
 type findReplace struct {
@@ -116,7 +118,7 @@ func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
 
 	// Find & replace the contents of file.
 	content := readFile(path)
-	if strings.Contains(content, fr.find) {
+	if util.IsText([]byte(content)) && strings.Contains(content, fr.find) {
 		newContent := strings.Replace(content, fr.find, fr.replace, -1)
 		writeFile(dirName, file, newContent)
 	}
