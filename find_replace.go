@@ -47,7 +47,7 @@ func (fr *findReplace) WalkDir(path string) {
 	// List the files in this path.
 	files, err := os.ReadDir(path)
 	if err != nil {
-		log.Fatal("Unable to read directory: ", err)
+		log.Fatalf("Unable to read directory: %v", err)
 	}
 
 	for _, file := range files {
@@ -74,10 +74,10 @@ func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
 
 	if file.Name() != newBaseName {
 		if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
-			log.Print("Renaming " + oldPath + " to " + newBaseName)
+			log.Printf("Renaming %v to %v", oldPath, newBaseName)
 			os.Rename(oldPath, newPath)
 		} else {
-			log.Print("Refusing to rename " + oldPath + " to " + newBaseName + " because " + newPath + " already exists.")
+			log.Fatalf("Refusing to rename %v to %v: %v already exists", oldPath, newBaseName, newPath)
 		}
 	}
 }
@@ -85,7 +85,7 @@ func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
 func readFile(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatal("Unable to open "+path, err)
+		log.Fatalf("Unable to open %v: %v", path, err)
 	}
 	defer f.Close()
 	builder := new(strings.Builder)
@@ -99,17 +99,15 @@ func writeFile(dirName string, file fs.DirEntry, content string) {
 
 	info, err := os.Stat(path)
 	if err != nil {
-		log.Print("Error getting stats on " + path)
-		log.Fatal(err)
+		log.Fatalf("Error getting stats on %v: %v", path, err)
 	}
 
 	tempName := dirName + string(os.PathSeparator) + randomString(20)
 	if err := os.WriteFile(tempName, []byte(content), info.Mode()); err != nil {
-		log.Print("Error creating tempfile in " + dirName)
-		log.Fatal(err)
+		log.Fatalf("Error creating tempfile in %v", dirName, err)
 	}
 
-	log.Print("Rewriting " + path)
+	log.Printf("Rewriting %v", path)
 	os.Rename(tempName, path)
 }
 
