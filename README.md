@@ -4,13 +4,17 @@ A fast find &amp; replace shell command.
 
 ## Usage
 
-Recursively find and replace the string `"a"` with `"b"` in both file names and file contents:
+Recursively find and replace the string `alpha` with `beta` in both file names and file contents:
 
 ```bash
-find-replace "a" "b"
+$ find-replace alpha beta
+Rewriting ./hello-world
+Renaming ./alphabet to betabet
 ```
 
-`.git/` directories are ignored.
+* Searches are case sensitive.
+* `.git/` directories are skipped.
+* File types are ignored.
 
 ## Goal
 
