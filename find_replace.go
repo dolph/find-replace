@@ -45,9 +45,9 @@ func main() {
 	fr.WalkDir(".")
 }
 
-func (fr *findReplace) WalkDir(path string) {
-	// List the files in this path.
-	files, err := os.ReadDir(path)
+func (fr *findReplace) WalkDir(dirName string) {
+	// List the files in this directory.
+	files, err := os.ReadDir(dirName)
 	if err != nil {
 		log.Fatalf("Unable to read directory: %v", err)
 	}
@@ -56,14 +56,14 @@ func (fr *findReplace) WalkDir(path string) {
 		if file.Name() != ".git" {
 			// If file is a directory, recurse immediately (depth-first).
 			if file.IsDir() {
-				fr.WalkDir(path + string(os.PathSeparator) + file.Name())
+				fr.WalkDir(dirName + string(os.PathSeparator) + file.Name())
 			} else {
 				// Replace the contents of regular files
-				fr.ReplaceContents(path, file)
+				fr.ReplaceContents(dirName, file)
 			}
 
 			// Rename the file now that we're otherwise done with it
-			fr.RenameFile(path, file)
+			fr.RenameFile(dirName, file)
 		}
 	}
 }
