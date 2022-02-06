@@ -104,7 +104,7 @@ func writeFile(dirName string, file fs.DirEntry, content string) {
 
 	tempName := dirName + string(os.PathSeparator) + randomString(20)
 	if err := os.WriteFile(tempName, []byte(content), info.Mode()); err != nil {
-		log.Fatalf("Error creating tempfile in %v", dirName, err)
+		log.Fatalf("Error creating tempfile in %v: %v", dirName, err)
 	}
 
 	log.Printf("Rewriting %v", path)
