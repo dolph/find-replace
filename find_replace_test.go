@@ -1,28 +1,25 @@
 package main
 
 import (
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestReplaceContents(t *testing.T) {
-	initial := "alpha"
-
-	f, err := os.CreateTemp("", "*")
+func createTestFile(path string, baseName string, content string) (string, fs.DirEntry, string) {
+	f, err := os.CreateTemp(path, baseName)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer os.Remove(f.Name())
 
 	file_info, err := f.Stat()
 	if err != nil {
 		log.Fatal(err)
 	}
-	baseName := file_info.Name()
 
-	if _, err := f.Write([]byte(initial)); err != nil {
+	if _, err := f.Write([]byte(content)); err != nil {
 		log.Fatal(err)
 	}
 	if err := f.Close(); err != nil {
@@ -38,19 +35,26 @@ func TestReplaceContents(t *testing.T) {
 	}
 	f_info := files[0]
 	for _, file := range files {
-		if file.Name() == baseName {
+		if file.Name() == file_info.Name() {
 			f_info = file
 			break
 		}
 	}
 
+	return dirName, f_info, f.Name()
+}
+
+func TestReplaceContents(t *testing.T) {
+	initial := "alpha"
 	find := "ph"
 	replace := "f"
 	want := "alfa"
+
+	dirName, f_info, path := createTestFile("", "*", initial)
+	defer os.Remove(path)
 	fr := findReplace{find: "ph", replace: "f"}
 	fr.ReplaceContents(dirName, f_info)
-
-	got := readFile(f.Name())
+	got := readFile(path)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
 	}
