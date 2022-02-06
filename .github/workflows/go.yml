@@ -8,6 +8,9 @@ on:
     branches:
     - main
 
+permissions:
+  contents: write
+
 jobs:
 
   build:
@@ -31,5 +34,4 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       with:
         body_path: README.md
-        token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         files: find-replace
