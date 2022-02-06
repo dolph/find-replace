@@ -2,10 +2,8 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -73,21 +71,16 @@ func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
 	newPath := dirName + string(os.PathSeparator) + newBaseName
 
 	if file.Name() != newBaseName {
-		fmt.Printf("%v -> %v\n", oldPath, newPath)
 		if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
+			log.Print("Renaming " + oldPath + " to " + newBaseName)
 			os.Rename(oldPath, newPath)
 		} else {
 			log.Print("Refusing to rename " + oldPath + " to " + newBaseName + " because " + newPath + " already exists.")
 		}
-	} else {
-		fmt.Printf("%v\n", oldPath)
 	}
 }
 
-func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
-	path := dirName + string(os.PathSeparator) + file.Name()
-
-	// Find & replace contents of file
+func readFile(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
 		log.Fatal("Unable to open "+path, err)
@@ -95,26 +88,37 @@ func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
 	defer f.Close()
 	builder := new(strings.Builder)
 	io.Copy(builder, f)
-	str := builder.String()
-	if strings.Contains(str, fr.find) {
-		content := strings.Replace(builder.String(), fr.find, fr.replace, -1)
-		tmpfile, err := ioutil.TempFile(dirName, randomString(20))
-		if err != nil {
-			log.Print("Error creating tempfile")
-			log.Fatal(err)
-		}
-		log.Print(tmpfile.Name())
+	return builder.String()
+}
 
-		if _, err := tmpfile.WriteString(content); err != nil {
-			log.Print("Error writing to tempfile")
-			log.Fatal(err)
-		}
-		if err := tmpfile.Close(); err != nil {
-			log.Print("Error closing tempfile")
-			log.Fatal(err)
-		}
+// Atomically write file.
+func writeFile(dirName string, file fs.DirEntry, content string) {
+	path := dirName + string(os.PathSeparator) + file.Name()
 
-		os.Rename(tmpfile.Name(), path)
+	info, err := os.Stat(path)
+	if err != nil {
+		log.Print("Error getting stats on " + path)
+		log.Fatal(err)
+	}
+
+	tempName := dirName + string(os.PathSeparator) + randomString(20)
+	if err := os.WriteFile(tempName, []byte(content), info.Mode()); err != nil {
+		log.Print("Error creating tempfile in " + dirName)
+		log.Fatal(err)
+	}
+
+	log.Print("Rewriting " + path)
+	os.Rename(tempName, path)
+}
+
+func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
+	path := dirName + string(os.PathSeparator) + file.Name()
+
+	// Find & replace the contents of file.
+	content := readFile(path)
+	if strings.Contains(content, fr.find) {
+		newContent := strings.Replace(content, fr.find, fr.replace, -1)
+		writeFile(dirName, file, newContent)
 	}
 }
 
