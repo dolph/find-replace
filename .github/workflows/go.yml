@@ -31,5 +31,5 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       with:
         body_path: README.md
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         files: find-replace
