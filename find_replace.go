@@ -25,7 +25,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	if len(os.Args) != 3 {
-		log.Print("usage: find-replace FIND REPLACE")
+		log.Fatal("usage: find-replace FIND REPLACE")
 	}
 
 	find := os.Args[1]
