@@ -127,6 +127,9 @@ func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
 var characters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 func randomString(n int) string {
+	if n <= 0 {
+		return ""
+	}
 	b := make([]rune, n)
 	for i := range b {
 		b[i] = characters[rand.Intn(len(characters))]
