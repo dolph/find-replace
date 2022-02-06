@@ -29,9 +29,6 @@ jobs:
     - name: Test
       run: go test -v ./...
 
-  release:
-    runs-on: ubuntu-latest
-    steps:
     - name: Release
       needs: build
       uses: softprops/action-gh-release@v1
