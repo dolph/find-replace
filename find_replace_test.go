@@ -60,6 +60,22 @@ func TestReplaceContents(t *testing.T) {
 	}
 }
 
+func TestReplaceContentsEntireFile(t *testing.T) {
+	initial := "alpha"
+	find := "alpha"
+	replace := "beta"
+	want := "beta"
+
+	dirName, f_info, path := createTestFile("", "*", initial)
+	defer os.Remove(path)
+	fr := findReplace{find: find, replace: replace}
+	fr.ReplaceContents(dirName, f_info)
+	got := readFile(path)
+	if got != want {
+		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
+	}
+}
+
 func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
 	initial := "alphaalpha"
 	find := "ph"
