@@ -81,7 +81,9 @@ func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
 	if file.Name() != newBaseName {
 		if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
 			log.Printf("Renaming %v to %v", oldPath, newBaseName)
-			os.Rename(oldPath, newPath)
+			if err := os.Rename(oldPath, newPath); err != nil {
+				log.Fatalf("Unable to rename %v to %v: %v", oldPath, newBaseName, err)
+			}
 		} else {
 			log.Fatalf("Refusing to rename %v to %v: %v already exists", oldPath, newBaseName, newPath)
 		}
