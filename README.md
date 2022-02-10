@@ -12,6 +12,8 @@ Rewriting ./hello-world
 Renaming ./alphabet to betabet
 ```
 
+* Files with matching contents in the working directory are atomically rewritten.
+* Files and directories are renamed.
 * Searches are performed recursively from the current working directory.
 * Searches are case sensitive.
 * `.git/` directories are skipped.
