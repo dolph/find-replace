@@ -54,18 +54,22 @@ func (fr *findReplace) WalkDir(dirName string) {
 
 	for _, file := range files {
 		if file.Name() != ".git" {
-			// If file is a directory, recurse immediately (depth-first).
-			if file.IsDir() {
-				fr.WalkDir(dirName + string(os.PathSeparator) + file.Name())
-			} else {
-				// Replace the contents of regular files
-				fr.ReplaceContents(dirName, file)
-			}
-
-			// Rename the file now that we're otherwise done with it
-			fr.RenameFile(dirName, file)
+			fr.HandleFile(dirName, file)
 		}
 	}
+}
+
+func (fr *findReplace) HandleFile(dirName string, file fs.DirEntry) {
+	// If file is a directory, recurse immediately (depth-first).
+	if file.IsDir() {
+		fr.WalkDir(dirName + string(os.PathSeparator) + file.Name())
+	} else {
+		// Replace the contents of regular files
+		fr.ReplaceContents(dirName, file)
+	}
+
+	// Rename the file now that we're otherwise done with it
+	fr.RenameFile(dirName, file)
 }
 
 // Renames a file if the destination does not already exist.
