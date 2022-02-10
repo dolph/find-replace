@@ -53,6 +53,15 @@ func assertFileExistsBeforeRename(t *testing.T, path string) {
 	}
 }
 
+func assertFileExistsAfterRename(t *testing.T, oldPath string, newPath string) {
+	if _, err := os.Stat(oldPath); err == nil {
+		t.Errorf("test file %v still exists after it was supposed to be renamed to %v", oldPath, newPath)
+	}
+	if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
+		t.Errorf("renamed test file %v does not exist", newPath)
+	}
+}
+
 func TestHandleFileWithFile(t *testing.T) {
 	initial := "alpha"
 	find := "ph"
@@ -68,18 +77,9 @@ func TestHandleFileWithFile(t *testing.T) {
 
 	assertFileExistsBeforeRename(t, path)
 	fr.HandleFile(dirName, f_info)
+	assertFileExistsAfterRename(t, path, expectedPath)
 
-	// Ensure the old path is gone
-	if _, err := os.Stat(path); err == nil {
-		t.Errorf("test file %v still exists after it was supposed to be renamed to %v", path, want)
-	}
-
-	//Ensure the file has been renamed
-	if _, err := os.Stat(expectedPath); errors.Is(err, os.ErrNotExist) {
-		t.Errorf("renamed test file %v does not exist", expectedPath)
-	}
-
-	got := readFile(expectedPath)
+	got := readFile(newPath)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
 	}
@@ -100,16 +100,7 @@ func TestRenameFile(t *testing.T) {
 
 	assertFileExistsBeforeRename(t, path)
 	fr.RenameFile(dirName, f_info)
-
-	// Ensure the old path is gone
-	if _, err := os.Stat(path); err == nil {
-		t.Errorf("test file %v still exists after it was supposed to be renamed to %v", path, want)
-	}
-
-	//Ensure the file has been renamed
-	if _, err := os.Stat(expectedPath); errors.Is(err, os.ErrNotExist) {
-		t.Errorf("renamed test file %v does not exist", expectedPath)
-	}
+	assertFileExistsAfterRename(t, path, expectedPath)
 }
 
 func TestReplaceContents(t *testing.T) {
