@@ -77,7 +77,7 @@ So, it effectively takes 3 attempts and a sum total of 19.237 seconds to find an
 `find-replace` v1.1.2 improves on this performance by completing the entire task in a single traversal, 98.2% faster overall (or 94.1% faster per traversal, without errors):
 
 ```
-* find-replace virt subvert
++ find-replace virt subvert
 Rewriting ./.zuul.yaml
 Rewriting ./HACKING.rst
 Rewriting ./README.rst
