@@ -16,7 +16,7 @@ func createTestFile(path string, baseName string, content string) (string, fs.Di
 		log.Fatal(err)
 	}
 
-	file_info, err := f.Stat()
+	fileInfo, err := f.Stat()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -30,20 +30,20 @@ func createTestFile(path string, baseName string, content string) (string, fs.Di
 
 	dirName := filepath.Dir(f.Name())
 
-	// There has to be a better way to get `f_info` directly for `f`?
+	// There has to be a better way to get `fInfo` directly for `f`?
 	files, err := os.ReadDir(dirName)
 	if err != nil {
 		log.Fatal(err)
 	}
-	f_info := files[0]
+	fInfo := files[0]
 	for _, file := range files {
-		if file.Name() == file_info.Name() {
-			f_info = file
+		if file.Name() == fileInfo.Name() {
+			fInfo = file
 			break
 		}
 	}
 
-	return dirName, f_info, f.Name()
+	return dirName, fInfo, f.Name()
 }
 
 func assertFileExistsBeforeRename(t *testing.T, path string) {
@@ -68,15 +68,15 @@ func TestHandleFileWithFile(t *testing.T) {
 	replace := "f"
 	want := "alfa"
 
-	dirName, f_info, path := createTestFile("", initial, initial)
+	dirName, fInfo, path := createTestFile("", initial, initial)
 	defer os.Remove(path)
-	expectedName := strings.Replace(f_info.Name(), find, replace, -1)
+	expectedName := strings.Replace(fInfo.Name(), find, replace, -1)
 	expectedPath := dirName + string(os.PathSeparator) + expectedName
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
 	assertFileExistsBeforeRename(t, path)
-	fr.HandleFile(dirName, f_info)
+	fr.HandleFile(dirName, fInfo)
 	assertFileExistsAfterRename(t, path, expectedPath)
 
 	got := readFile(expectedPath)
@@ -89,16 +89,17 @@ func TestRenameFile(t *testing.T) {
 	initial := "alpha"
 	find := "ph"
 	replace := "f"
+	want := "alfa"
 
-	dirName, f_info, path := createTestFile("", initial, "")
+	dirName, fInfo, path := createTestFile("", initial, "")
 	defer os.Remove(path)
-	expectedName := strings.Replace(f_info.Name(), find, replace, -1)
+	expectedName := strings.Replace(fInfo.Name(), find, replace, -1)
 	expectedPath := dirName + string(os.PathSeparator) + expectedName
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
 	assertFileExistsBeforeRename(t, path)
-	fr.RenameFile(dirName, f_info)
+	fr.RenameFile(dirName, fInfo)
 	assertFileExistsAfterRename(t, path, expectedPath)
 }
 
@@ -108,10 +109,10 @@ func TestReplaceContents(t *testing.T) {
 	replace := "f"
 	want := "alfa"
 
-	dirName, f_info, path := createTestFile("", "*", initial)
+	dirName, fInfo, path := createTestFile("", "*", initial)
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(dirName, f_info)
+	fr.ReplaceContents(dirName, fInfo)
 	got := readFile(path)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
@@ -124,10 +125,10 @@ func TestReplaceContentsEntireFile(t *testing.T) {
 	replace := "beta"
 	want := "beta"
 
-	dirName, f_info, path := createTestFile("", "*", initial)
+	dirName, fInfo, path := createTestFile("", "*", initial)
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(dirName, f_info)
+	fr.ReplaceContents(dirName, fInfo)
 	got := readFile(path)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
@@ -140,10 +141,10 @@ func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
 	replace := "f"
 	want := "alfaalfa"
 
-	dirName, f_info, path := createTestFile("", "*", initial)
+	dirName, fInfo, path := createTestFile("", "*", initial)
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(dirName, f_info)
+	fr.ReplaceContents(dirName, fInfo)
 	got := readFile(path)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
@@ -156,10 +157,10 @@ func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
 	replace := "f"
 	want := "alfa\nalfa"
 
-	dirName, f_info, path := createTestFile("", "*", initial)
+	dirName, fInfo, path := createTestFile("", "*", initial)
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(dirName, f_info)
+	fr.ReplaceContents(dirName, fInfo)
 	got := readFile(path)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
@@ -172,10 +173,10 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	replace := "xyz"
 	want := "alpha"
 
-	dirName, f_info, path := createTestFile("", "*", initial)
+	dirName, fInfo, path := createTestFile("", "*", initial)
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(dirName, f_info)
+	fr.ReplaceContents(dirName, fInfo)
 	got := readFile(path)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
