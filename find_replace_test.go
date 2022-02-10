@@ -79,7 +79,7 @@ func TestHandleFileWithFile(t *testing.T) {
 	fr.HandleFile(dirName, f_info)
 	assertFileExistsAfterRename(t, path, expectedPath)
 
-	got := readFile(newPath)
+	got := readFile(expectedPath)
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
 	}
@@ -89,7 +89,6 @@ func TestRenameFile(t *testing.T) {
 	initial := "alpha"
 	find := "ph"
 	replace := "f"
-	want := "alfa"
 
 	dirName, f_info, path := createTestFile("", initial, "")
 	defer os.Remove(path)
