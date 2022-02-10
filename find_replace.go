@@ -97,7 +97,9 @@ func readFile(path string) string {
 	}
 	defer f.Close()
 	builder := new(strings.Builder)
-	io.Copy(builder, f)
+	if _, err := io.Copy(builder, f); err != nil {
+		log.Fatalf("Failed to read %v to a string: %v", path, err)
+	}
 	return builder.String()
 }
 
