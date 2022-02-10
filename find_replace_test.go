@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,6 +44,36 @@ func createTestFile(path string, baseName string, content string) (string, fs.Di
 	}
 
 	return dirName, f_info, f.Name()
+}
+
+func TestRenameFile(t *testing.T) {
+	initial := "alpha"
+	find := "ph"
+	replace := "f"
+	want := "alfa"
+
+	dirName, f_info, path := createTestFile("", initial, "")
+	defer os.Remove(path)
+	expectedName := strings.Replace(f_info.Name(), find, replace, -1)
+	expectedPath := dirName + string(os.PathSeparator) + expectedName
+	defer os.Remove(expectedPath)
+	fr := findReplace{find: find, replace: replace}
+
+	// Ensure file exists as expected before renaming
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		t.Errorf("test file %v does not exist", path)
+	}
+	fr.RenameFile(dirName, f_info)
+
+	// Ensure the old path is gone
+	if _, err := os.Stat(path); err == nil {
+		t.Errorf("test file %v still exists after it was supposed to be renamed to %v", path, want)
+	}
+
+	//Ensure the file has been renamed
+	if _, err := os.Stat(expectedPath); errors.Is(err, os.ErrNotExist) {
+		t.Errorf("renamed test file %v does not exist", expectedPath)
+	}
 }
 
 func TestReplaceContents(t *testing.T) {
