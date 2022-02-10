@@ -89,7 +89,6 @@ func TestRenameFile(t *testing.T) {
 	initial := "alpha"
 	find := "ph"
 	replace := "f"
-	want := "alfa"
 
 	dirName, fInfo, path := createTestFile("", initial, "")
 	defer os.Remove(path)
