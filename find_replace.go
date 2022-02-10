@@ -118,7 +118,9 @@ func writeFile(dirName string, file fs.DirEntry, content string) {
 	}
 
 	log.Printf("Rewriting %v", path)
-	os.Rename(tempName, path)
+	if err := os.Rename(tempName, path); err != nil {
+		log.Fatalf("Unable to atomically move temp file %v to %v: %v", tempName, path, err)
+	}
 }
 
 func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
