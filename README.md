@@ -30,7 +30,9 @@ find . -type f -not -path './.git/*' -exec sed -i "s/$1/$2/g" '{}' \;
 find . -iname "*$1*" -not -path "./.git/*" -exec rename "$1" "$2" '{}' \;
 ```
 
-However, in order to recursively rename files & directories with this snippet, you have to run it until it stops failing (because it's renaming directories that it has not traversed yet):
+### Benchmarking
+
+In order to recursively rename files & directories with this snippet, you have to run it until it stops failing (because it's renaming directories that it has not traversed yet):
 
 First attempt:
 
@@ -69,3 +71,23 @@ sys     0m4.866s
 ```
 
 So, it effectively takes 3 attempts and a sum total of 19.237 seconds to find and replace "virt" with "libvirt" in this example.
+
+#### `find-replace` v1.1.2
+
+`find-replace` v1.1.2 improves on this performance by completing the entire task in a single traversal, 98.2% faster overall (or 94.1% faster per traversal, without errors):
+
+```
+* find-replace virt subvert
+Rewriting ./.zuul.yaml
+Rewriting ./HACKING.rst
+Rewriting ./README.rst
+[866 lines of output removed]
+Rewriting ./setup.cfg
+Rewriting ./tools/run-tests.py
+Rewriting ./tox.ini
+real    0m0.351s
+user    0m0.152s
+sys     0m0.150s
+```
+
+`find-replace` v1.1.2 is single-threaded.
