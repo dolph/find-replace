@@ -32,7 +32,7 @@ find . -iname "*$1*" -not -path "./.git/*" -exec rename "$1" "$2" '{}' \;
 
 ### Benchmarking
 
-In order to recursively rename files & directories with this snippet, you have to run it until it stops failing (because it's renaming directories that it has not traversed yet):
+In order to recursively rename files & directories with the bash snippet above, you have to run it until it stops failing (because it's renaming directories that it has not traversed yet):
 
 First attempt:
 
