@@ -182,10 +182,10 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	}
 }
 
-func assertRandomStringLength(t *testing.T, length int, want int) {
-	got := len(randomString(length))
+func assertRandomStringLength(t *testing.T, ask int, want int) {
+	got := len(randomString(ask))
 	if got != want {
-		t.Errorf("len(RandomString(%v)) = %v; want %v", length, got, want)
+		t.Errorf("len(RandomString(%v)) = %v; want %v", ask, got, want)
 	}
 }
 
