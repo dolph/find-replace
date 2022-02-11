@@ -102,6 +102,13 @@ func TestRenameFile(t *testing.T) {
 	assertFileExistsAfterRename(t, path, expectedPath)
 }
 
+func assertNewContentsOfFile(t *testing.T, path string, initial string, find string, replace string, want string) {
+	got := readFile(path)
+	if got != want {
+		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
+	}
+}
+
 func TestReplaceContents(t *testing.T) {
 	initial := "alpha"
 	find := "ph"
@@ -112,10 +119,7 @@ func TestReplaceContents(t *testing.T) {
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(dirName, fInfo)
-	got := readFile(path)
-	if got != want {
-		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
-	}
+	assertNewContentsOfFile(t, path, initial, find, replace, want)
 }
 
 func TestReplaceContentsEntireFile(t *testing.T) {
@@ -128,10 +132,7 @@ func TestReplaceContentsEntireFile(t *testing.T) {
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(dirName, fInfo)
-	got := readFile(path)
-	if got != want {
-		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
-	}
+	assertNewContentsOfFile(t, path, initial, find, replace, want)
 }
 
 func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
@@ -144,10 +145,7 @@ func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(dirName, fInfo)
-	got := readFile(path)
-	if got != want {
-		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
-	}
+	assertNewContentsOfFile(t, path, initial, find, replace, want)
 }
 
 func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
@@ -160,10 +158,7 @@ func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(dirName, fInfo)
-	got := readFile(path)
-	if got != want {
-		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
-	}
+	assertNewContentsOfFile(t, path, initial, find, replace, want)
 }
 
 func TestReplaceContentsNoMatches(t *testing.T) {
@@ -176,10 +171,7 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	defer os.Remove(path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(dirName, fInfo)
-	got := readFile(path)
-	if got != want {
-		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
-	}
+	assertNewContentsOfFile(t, path, initial, find, replace, want)
 }
 
 func assertRandomStringLength(t *testing.T, ask int, want int) {
