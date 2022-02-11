@@ -182,37 +182,29 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	}
 }
 
-func TestRandomStringLengthNegativeOne(t *testing.T) {
-	got := randomString(-1)
-	if len(got) != 0 {
-		t.Errorf("len(RandomString(-1)) = %v; want 0", got)
+func assertRandomStringLength(t *testing.T, length int, want int) {
+	got := len(randomString(length))
+	if got != want {
+		t.Errorf("len(RandomString(%v)) = %v; want %v", length, got, want)
 	}
+}
+
+func TestRandomStringLengthNegativeOne(t *testing.T) {
+	assertRandomStringLength(t, -1, 0)
 }
 
 func TestRandomStringLengthZero(t *testing.T) {
-	got := randomString(0)
-	if len(got) != 0 {
-		t.Errorf("len(RandomString(0)) = %v; want 0", got)
-	}
+	assertRandomStringLength(t, 0, 0)
 }
 
 func TestRandomStringLengthOne(t *testing.T) {
-	got := randomString(1)
-	if len(got) != 1 {
-		t.Errorf("len(RandomString(1)) = %v; want 1", got)
-	}
+	assertRandomStringLength(t, 1, 1)
 }
 
 func TestRandomStringLengthTen(t *testing.T) {
-	got := randomString(10)
-	if len(got) != 10 {
-		t.Errorf("len(RandomString(10)) = %v; want 10", got)
-	}
+	assertRandomStringLength(t, 10, 10)
 }
 
 func TestRandomStringLengthTwenty(t *testing.T) {
-	got := randomString(20)
-	if len(got) != 20 {
-		t.Errorf("len(RandomString(20)) = %v; want 20", got)
-	}
+	assertRandomStringLength(t, 20, 20)
 }
