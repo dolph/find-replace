@@ -13,16 +13,21 @@ import (
 	"golang.org/x/tools/godoc/util"
 )
 
+// findReplace is a struct used to provide context to all find & replace
+// operations, including the strings to search for & replace.
 type findReplace struct {
 	find    string
 	replace string
 }
 
-// ** Variable terminology **
-// dirName: the name of a directory, without a trailing separator
-// baseName: the relative name of a file, without a directory
-// path: the relative path to a specific file or directory, including both dirName and baseName
-
+// main processes command line arguments, builds the context struct, and begins
+// the process of walking the current working directory.
+//
+// Variable terminology used throughout this module:
+//
+// • dirName: the name of a directory, without a trailing separator
+// • baseName: the relative name of a file, without a directory
+// • path: the relative path to a specific file or directory, including both dirName and baseName
 func main() {
 	// Remove date/time from logging output
 	log.SetFlags(0)
@@ -45,6 +50,8 @@ func main() {
 	fr.WalkDir(".")
 }
 
+// Walks files in the directory given by dirName, which is a relative path to a
+// directory. Calls HandleFile for each file it finds, if it's not ignored.
 func (fr *findReplace) WalkDir(dirName string) {
 	// List the files in this directory.
 	files, err := os.ReadDir(dirName)
@@ -59,6 +66,10 @@ func (fr *findReplace) WalkDir(dirName string) {
 	}
 }
 
+// HandleFile immediately recurses depth-first into directories it finds,
+// otherwise calls ReplaceContents for regular files. When either operation is
+// complete, the file is renamed (if necessary) since no subsequent operations
+// will need to access it again.
 func (fr *findReplace) HandleFile(dirName string, file fs.DirEntry) {
 	// If file is a directory, recurse immediately (depth-first).
 	if file.IsDir() {
@@ -72,7 +83,8 @@ func (fr *findReplace) HandleFile(dirName string, file fs.DirEntry) {
 	fr.RenameFile(dirName, file)
 }
 
-// Renames a file if the destination does not already exist.
+// RenameFile renames a file if the destination file name does not already
+// exist.
 func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
 	oldPath := dirName + string(os.PathSeparator) + file.Name()
 	newBaseName := strings.Replace(file.Name(), fr.find, fr.replace, -1)
@@ -90,6 +102,20 @@ func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
 	}
 }
 
+// Replaces the contents of the given file, using the find & replace values in
+// context.
+func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
+	path := dirName + string(os.PathSeparator) + file.Name()
+
+	// Find & replace the contents of file.
+	content := readFile(path)
+	if util.IsText([]byte(content)) && strings.Contains(content, fr.find) {
+		newContent := strings.Replace(content, fr.find, fr.replace, -1)
+		writeFile(dirName, file, newContent)
+	}
+}
+
+// readFile reads a file at the given path into a string.
 func readFile(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -103,7 +129,8 @@ func readFile(path string) string {
 	return builder.String()
 }
 
-// Atomically write file.
+// writeFile atomically write content to file by writing it to a temporary file
+// first, and then moving it to the destination, overwriting the original.
 func writeFile(dirName string, file fs.DirEntry, content string) {
 	path := dirName + string(os.PathSeparator) + file.Name()
 
@@ -123,19 +150,10 @@ func writeFile(dirName string, file fs.DirEntry, content string) {
 	}
 }
 
-func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
-	path := dirName + string(os.PathSeparator) + file.Name()
-
-	// Find & replace the contents of file.
-	content := readFile(path)
-	if util.IsText([]byte(content)) && strings.Contains(content, fr.find) {
-		newContent := strings.Replace(content, fr.find, fr.replace, -1)
-		writeFile(dirName, file, newContent)
-	}
-}
-
 var characters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
+// randomString generates a random base-62 string of the given length (or returns an
+// empty string).
 func randomString(n int) string {
 	if n <= 0 {
 		return ""
