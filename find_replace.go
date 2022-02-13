@@ -2,11 +2,9 @@ package main
 
 import (
 	"errors"
-	"io"
 	"log"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,42 +16,6 @@ import (
 type findReplace struct {
 	find    string
 	replace string
-}
-
-type File struct {
-	Path string
-	info os.FileInfo
-}
-
-func NewFile(path string) *File {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		log.Fatalf("Unable to resolve absolute path of %v: %v", path, err)
-	}
-	return &File{Path: absPath}
-}
-
-func (f *File) Base() string {
-	return filepath.Base(f.Path)
-}
-
-func (f *File) Dir() string {
-	return filepath.Dir(f.Path)
-}
-
-func (f *File) Info() os.FileInfo {
-	if f.info == nil {
-		stat, err := os.Stat(f.Path)
-		if err != nil {
-			log.Fatalf("Failed to stat %v: %v", f.Path, err)
-		}
-		f.info = stat
-	}
-	return f.info
-}
-
-func (f *File) Mode() os.FileMode {
-	return f.Info().Mode()
 }
 
 // main processes command line arguments, builds the context struct, and begins
@@ -142,52 +104,9 @@ func (fr *findReplace) RenameFile(f *File) {
 // context.
 func (fr *findReplace) ReplaceContents(f *File) {
 	// Find & replace the contents of file.
-	content := readFile(f.Path)
+	content := f.Read()
 	if util.IsText([]byte(content)) && strings.Contains(content, fr.find) {
 		newContent := strings.Replace(content, fr.find, fr.replace, -1)
-		writeFile(f, newContent)
+		f.Write(newContent)
 	}
-}
-
-// readFile reads a file at the given path into a string.
-func readFile(path string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		log.Fatalf("Unable to open %v: %v", path, err)
-	}
-	defer f.Close()
-	builder := new(strings.Builder)
-	if _, err := io.Copy(builder, f); err != nil {
-		log.Fatalf("Failed to read %v to a string: %v", path, err)
-	}
-	return builder.String()
-}
-
-// writeFile atomically write content to file by writing it to a temporary file
-// first, and then moving it to the destination, overwriting the original.
-func writeFile(f *File, content string) {
-	tempName := f.Dir() + string(os.PathSeparator) + randomString(20)
-	if err := os.WriteFile(tempName, []byte(content), f.Mode()); err != nil {
-		log.Fatalf("Error creating tempfile in %v: %v", f.Dir(), err)
-	}
-
-	log.Printf("Rewriting %v", f.Path)
-	if err := os.Rename(tempName, f.Path); err != nil {
-		log.Fatalf("Unable to atomically move temp file %v to %v: %v", tempName, f.Path, err)
-	}
-}
-
-var characters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-// randomString generates a random base-62 string of the given length (or returns an
-// empty string).
-func randomString(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = characters[rand.Intn(len(characters))]
-	}
-	return string(b)
 }

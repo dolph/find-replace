@@ -67,7 +67,7 @@ func TestHandleFileWithFile(t *testing.T) {
 	fr.HandleFile(f)
 	assertPathExistsAfterRename(t, f.Path, expectedPath)
 
-	got := readFile(expectedPath)
+	got := NewFile(expectedPath).Read()
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
 	}
@@ -93,7 +93,7 @@ func TestRenameFile(t *testing.T) {
 // assertNewContentsOfFile ensures that the contents of the file at the given
 // path exactly match the desired string.
 func assertNewContentsOfFile(t *testing.T, path string, initial string, find string, replace string, want string) {
-	got := readFile(path)
+	got := NewFile(path).Read()
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
 	}
@@ -162,33 +162,4 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(f)
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
-}
-
-// assertRandomStringLength ensures that the generated string matches the
-// desired length.
-func assertRandomStringLength(t *testing.T, ask int, want int) {
-	got := len(randomString(ask))
-	if got != want {
-		t.Errorf("len(RandomString(%v)) = %v; want %v", ask, got, want)
-	}
-}
-
-func TestRandomStringLengthNegativeOne(t *testing.T) {
-	assertRandomStringLength(t, -1, 0)
-}
-
-func TestRandomStringLengthZero(t *testing.T) {
-	assertRandomStringLength(t, 0, 0)
-}
-
-func TestRandomStringLengthOne(t *testing.T) {
-	assertRandomStringLength(t, 1, 1)
-}
-
-func TestRandomStringLengthTen(t *testing.T) {
-	assertRandomStringLength(t, 10, 10)
-}
-
-func TestRandomStringLengthTwenty(t *testing.T) {
-	assertRandomStringLength(t, 20, 20)
 }
