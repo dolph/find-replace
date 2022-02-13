@@ -91,7 +91,7 @@ func main() {
 // directory. Calls HandleFile for each file it finds, if it's not ignored.
 func (fr *findReplace) WalkDir(f *File) {
 	// List the files in this directory.
-	files, err := os.ReadDir(f.Info().Name())
+	files, err := os.ReadDir(f.Path)
 	if err != nil {
 		log.Fatalf("Unable to read directory: %v", err)
 	}
