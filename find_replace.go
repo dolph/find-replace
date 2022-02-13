@@ -23,7 +23,6 @@ type findReplace struct {
 type File struct {
 	Path string
 	info os.FileInfo
-	file os.File
 }
 
 func NewFile(path string) *File {
