@@ -23,13 +23,16 @@ func createTestFile(path string, baseName string, content string) (string, fs.Di
 
 	fileInfo, err := f.Stat()
 	if err != nil {
+		defer os.Remove(f.Name())
 		log.Fatal(err)
 	}
 
 	if _, err := f.Write([]byte(content)); err != nil {
+		defer os.Remove(f.Name())
 		log.Fatal(err)
 	}
 	if err := f.Close(); err != nil {
+		defer os.Remove(f.Name())
 		log.Fatal(err)
 	}
 
@@ -38,6 +41,7 @@ func createTestFile(path string, baseName string, content string) (string, fs.Di
 	// There has to be a better way to get `fInfo` directly for `f`?
 	files, err := os.ReadDir(dirName)
 	if err != nil {
+		defer os.Remove(f.Name())
 		log.Fatal(err)
 	}
 	fInfo := files[0]
