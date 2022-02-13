@@ -10,6 +10,11 @@ import (
 	"testing"
 )
 
+// createTestFile creates a file in the given directory path, with the given
+// name and content. If a directory path is not provided, a temp directory is
+// used. If a baseName is not provided, a random file name is generated.
+// Returns the directory where the file was created, the file's directory
+// entry, and the actual name of the file.
 func createTestFile(path string, baseName string, content string) (string, fs.DirEntry, string) {
 	f, err := os.CreateTemp(path, baseName)
 	if err != nil {
@@ -46,6 +51,8 @@ func createTestFile(path string, baseName string, content string) (string, fs.Di
 	return dirName, fInfo, f.Name()
 }
 
+// assertFileExistsBeforeRename ensures that the file at the given path exists
+// prior to being renamed.
 func assertFileExistsBeforeRename(t *testing.T, path string) {
 	// Ensure file exists as expected before renaming
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
@@ -53,6 +60,8 @@ func assertFileExistsBeforeRename(t *testing.T, path string) {
 	}
 }
 
+// assertFileExistsAfterRename ensures that the file at oldPath no longer
+// exists, and that a file at newPath exists instead.
 func assertFileExistsAfterRename(t *testing.T, oldPath string, newPath string) {
 	if _, err := os.Stat(oldPath); err == nil {
 		t.Errorf("test file %v still exists after it was supposed to be renamed to %v", oldPath, newPath)
@@ -102,6 +111,8 @@ func TestRenameFile(t *testing.T) {
 	assertFileExistsAfterRename(t, path, expectedPath)
 }
 
+// assertNewContentsOfFile ensures that the contents of the file at the given
+// path exactly match the desired string.
 func assertNewContentsOfFile(t *testing.T, path string, initial string, find string, replace string, want string) {
 	got := readFile(path)
 	if got != want {
@@ -174,6 +185,8 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	assertNewContentsOfFile(t, path, initial, find, replace, want)
 }
 
+// assertRandomStringLength ensures that the generated string matches the
+// desired length.
 func assertRandomStringLength(t *testing.T, ask int, want int) {
 	got := len(randomString(ask))
 	if got != want {
