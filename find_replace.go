@@ -3,10 +3,10 @@ package main
 import (
 	"errors"
 	"io"
-	"io/fs"
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +18,44 @@ import (
 type findReplace struct {
 	find    string
 	replace string
+}
+
+type File struct {
+	Path string
+	info os.FileInfo
+	file os.File
+}
+
+func NewFile(path string) *File {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		log.Fatalf("Unable to resolve absolute path of %v: %v", path, err)
+	}
+	println("got abs: " + absPath)
+	return &File{Path: absPath}
+}
+
+func (f *File) Base() string {
+	return filepath.Base(f.Path)
+}
+
+func (f *File) Dir() string {
+	return filepath.Dir(f.Path)
+}
+
+func (f *File) Info() os.FileInfo {
+	if f.info == nil {
+		stat, err := os.Stat(f.Path)
+		if err != nil {
+			log.Fatalf("Failed to stat %v: %v", f.Path, err)
+		}
+		f.info = stat
+	}
+	return f.info
+}
+
+func (f *File) Mode() os.FileMode {
+	return f.Info().Mode()
 }
 
 // main processes command line arguments, builds the context struct, and begins
@@ -47,21 +85,22 @@ func main() {
 	// path.filepath.WalkDir() won't work here because it walks files
 	// alphabetically, breadth-first (and you'd be renaming files that you
 	// haven't explored yet).
-	fr.WalkDir(".")
+
+	fr.WalkDir(NewFile("."))
 }
 
 // Walks files in the directory given by dirName, which is a relative path to a
 // directory. Calls HandleFile for each file it finds, if it's not ignored.
-func (fr *findReplace) WalkDir(dirName string) {
+func (fr *findReplace) WalkDir(f *File) {
 	// List the files in this directory.
-	files, err := os.ReadDir(dirName)
+	files, err := os.ReadDir(f.Info().Name())
 	if err != nil {
 		log.Fatalf("Unable to read directory: %v", err)
 	}
 
 	for _, file := range files {
 		if file.Name() != ".git" {
-			fr.HandleFile(dirName, file)
+			fr.HandleFile(NewFile(f.Path + string(os.PathSeparator) + file.Name()))
 		}
 	}
 }
@@ -70,48 +109,45 @@ func (fr *findReplace) WalkDir(dirName string) {
 // otherwise calls ReplaceContents for regular files. When either operation is
 // complete, the file is renamed (if necessary) since no subsequent operations
 // will need to access it again.
-func (fr *findReplace) HandleFile(dirName string, file fs.DirEntry) {
+func (fr *findReplace) HandleFile(f *File) {
 	// If file is a directory, recurse immediately (depth-first).
-	if file.IsDir() {
-		fr.WalkDir(dirName + string(os.PathSeparator) + file.Name())
+	if f.Info().IsDir() {
+		fr.WalkDir(f)
 	} else {
 		// Replace the contents of regular files
-		fr.ReplaceContents(dirName, file)
+		fr.ReplaceContents(f)
 	}
 
 	// Rename the file now that we're otherwise done with it
-	fr.RenameFile(dirName, file)
+	fr.RenameFile(f)
 }
 
 // RenameFile renames a file if the destination file name does not already
 // exist.
-func (fr *findReplace) RenameFile(dirName string, file fs.DirEntry) {
-	oldPath := dirName + string(os.PathSeparator) + file.Name()
-	newBaseName := strings.Replace(file.Name(), fr.find, fr.replace, -1)
-	newPath := dirName + string(os.PathSeparator) + newBaseName
+func (fr *findReplace) RenameFile(f *File) {
+	newBaseName := strings.Replace(f.Base(), fr.find, fr.replace, -1)
+	newPath := f.Dir() + string(os.PathSeparator) + newBaseName
 
-	if file.Name() != newBaseName {
+	if f.Base() != newBaseName {
 		if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
-			log.Printf("Renaming %v to %v", oldPath, newBaseName)
-			if err := os.Rename(oldPath, newPath); err != nil {
-				log.Fatalf("Unable to rename %v to %v: %v", oldPath, newBaseName, err)
+			log.Printf("Renaming %v to %v", f.Path, newBaseName)
+			if err := os.Rename(f.Path, newPath); err != nil {
+				log.Fatalf("Unable to rename %v to %v: %v", f.Path, newBaseName, err)
 			}
 		} else {
-			log.Fatalf("Refusing to rename %v to %v: %v already exists", oldPath, newBaseName, newPath)
+			log.Fatalf("Refusing to rename %v to %v: %v already exists", f.Path, newBaseName, newPath)
 		}
 	}
 }
 
 // Replaces the contents of the given file, using the find & replace values in
 // context.
-func (fr *findReplace) ReplaceContents(dirName string, file fs.DirEntry) {
-	path := dirName + string(os.PathSeparator) + file.Name()
-
+func (fr *findReplace) ReplaceContents(f *File) {
 	// Find & replace the contents of file.
-	content := readFile(path)
+	content := readFile(f.Path)
 	if util.IsText([]byte(content)) && strings.Contains(content, fr.find) {
 		newContent := strings.Replace(content, fr.find, fr.replace, -1)
-		writeFile(dirName, file, newContent)
+		writeFile(f, newContent)
 	}
 }
 
@@ -131,22 +167,15 @@ func readFile(path string) string {
 
 // writeFile atomically write content to file by writing it to a temporary file
 // first, and then moving it to the destination, overwriting the original.
-func writeFile(dirName string, file fs.DirEntry, content string) {
-	path := dirName + string(os.PathSeparator) + file.Name()
-
-	info, err := os.Stat(path)
-	if err != nil {
-		log.Fatalf("Error getting stats on %v: %v", path, err)
+func writeFile(f *File, content string) {
+	tempName := f.Dir() + string(os.PathSeparator) + randomString(20)
+	if err := os.WriteFile(tempName, []byte(content), f.Mode()); err != nil {
+		log.Fatalf("Error creating tempfile in %v: %v", f.Dir(), err)
 	}
 
-	tempName := dirName + string(os.PathSeparator) + randomString(20)
-	if err := os.WriteFile(tempName, []byte(content), info.Mode()); err != nil {
-		log.Fatalf("Error creating tempfile in %v: %v", dirName, err)
-	}
-
-	log.Printf("Rewriting %v", path)
-	if err := os.Rename(tempName, path); err != nil {
-		log.Fatalf("Unable to atomically move temp file %v to %v: %v", tempName, path, err)
+	log.Printf("Rewriting %v", f.Path)
+	if err := os.Rename(tempName, f.Path); err != nil {
+		log.Fatalf("Unable to atomically move temp file %v to %v: %v", tempName, f.Path, err)
 	}
 }
 
