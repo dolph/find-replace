@@ -70,7 +70,7 @@ user    0m1.705s
 sys     0m4.866s
 ```
 
-So, it effectively takes 3 attempts and a sum total of 19.237 seconds to find and replace "virt" with "libvirt" in this example.
+So, it effectively takes 3 attempts and a sum total of 19.237 seconds to find and replace "virt" with "subvert" in this example.
 
 #### `find-replace` v1.1.2
 
