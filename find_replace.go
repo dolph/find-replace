@@ -30,7 +30,6 @@ func NewFile(path string) *File {
 	if err != nil {
 		log.Fatalf("Unable to resolve absolute path of %v: %v", path, err)
 	}
-	println("got abs: " + absPath)
 	return &File{Path: absPath}
 }
 
