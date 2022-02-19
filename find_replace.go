@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -67,6 +68,8 @@ func (fr *findReplace) WalkDir(f *File) {
 // complete, the file is renamed (if necessary) since no subsequent operations
 // will need to access it again.
 func (fr *findReplace) HandleFile(f *File) {
+	var wg sync.WaitGroup
+
 	// If file is a directory, recurse immediately (depth-first).
 	if f.Info().IsDir() {
 		// Ignore certain directories
@@ -74,11 +77,17 @@ func (fr *findReplace) HandleFile(f *File) {
 			return
 		}
 
-		fr.WalkDir(f)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fr.WalkDir(f)
+		}()
 	} else {
 		// Replace the contents of regular files
 		fr.ReplaceContents(f)
 	}
+
+	wg.Wait() // for (potentially recursive) WalkDir calls to return
 
 	// Rename the file now that we're otherwise done with it
 	fr.RenameFile(f)
