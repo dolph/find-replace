@@ -30,6 +30,19 @@ func createTestFile(path string, baseName string, content string) *File {
 	return NewFile(f.Name())
 }
 
+// createTestDir creates a directory in the given directory path, with the
+// given base name. If a directory path is not provided, a temp directory is
+// used. If a baseName is not provided, a random file name is generated.
+// Returns the directory where the file was created, the file's directory
+// entry, and the actual name of the file.
+func createTestDir(path string, baseName string) *File {
+	dirPath, err := os.MkdirTemp(path, baseName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return NewFile(dirPath)
+}
+
 // assertPathExistsBeforeRename ensures that the file at the given path exists
 // prior to being renamed.
 func assertPathExistsBeforeRename(t *testing.T, path string) {
@@ -48,6 +61,26 @@ func assertPathExistsAfterRename(t *testing.T, oldPath string, newPath string) {
 	if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
 		t.Errorf("renamed test file %v does not exist", newPath)
 	}
+}
+
+func TestHandleFileWithDir(t *testing.T) {
+	initial := "alpha"
+	find := "ph"
+	replace := "f"
+
+	f := createTestDir("", initial)
+	defer os.Remove(f.Path)
+	expectedName := strings.Replace(f.Base(), find, replace, -1)
+	expectedPath := f.Dir() + string(os.PathSeparator) + expectedName
+	defer os.Remove(expectedPath)
+	fr := findReplace{find: find, replace: replace}
+
+	assertPathExistsBeforeRename(t, f.Path)
+	fr.HandleFile(f)
+	assertPathExistsAfterRename(t, f.Path, expectedPath)
+}
+
+func TestHandleFileWithIgnoredDir(t *testing.T) {
 }
 
 func TestHandleFileWithFile(t *testing.T) {
