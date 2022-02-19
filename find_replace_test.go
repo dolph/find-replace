@@ -63,6 +63,11 @@ func assertPathExistsAfterRename(t *testing.T, oldPath string, newPath string) {
 	}
 }
 
+// TestWalkDir is the most important test of the entire suite, because it
+// exercises all the basic functionality of the app. It builds a directory tree
+// of temporary files and directories, walks the entire tree, and ensures that
+// all files and directories are appropriately renamed at at the end, and all
+// files contain the correct contents.
 func TestWalkDir(t *testing.T) {
 	find := "wh"
 	replace := "f"
