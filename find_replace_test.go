@@ -43,9 +43,9 @@ func createTestDir(path string, baseName string) *File {
 	return NewFile(dirPath)
 }
 
-// assertPathExistsBeforeRename ensures that the file at the given path exists
+// assertPathExists ensures that the file at the given path exists
 // prior to being renamed.
-func assertPathExistsBeforeRename(t *testing.T, path string) {
+func assertPathExists(t *testing.T, path string) {
 	// Ensure file exists as expected before renaming
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		t.Errorf("test file %v does not exist", path)
@@ -75,12 +75,32 @@ func TestHandleFileWithDir(t *testing.T) {
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
-	assertPathExistsBeforeRename(t, f.Path)
+	assertPathExists(t, f.Path)
 	fr.HandleFile(f)
 	assertPathExistsAfterRename(t, f.Path, expectedPath)
 }
 
 func TestHandleFileWithIgnoredDir(t *testing.T) {
+	initial := ".git"
+	find := "git"
+	replace := "got"
+
+	dirPath := os.TempDir() + string(os.PathSeparator) + initial
+	if err := os.Mkdir(dirPath, 0700); err != nil {
+		log.Fatal(err)
+	}
+	f := NewFile(dirPath)
+	defer os.Remove(f.Path)
+	// Just in case it's unexpectedly renamed, let's make sure we cleanup the
+	// anticipated name.
+	unexpectedName := strings.Replace(f.Base(), find, replace, -1)
+	unexpectedPath := f.Dir() + string(os.PathSeparator) + unexpectedName
+	defer os.Remove(unexpectedPath)
+	fr := findReplace{find: find, replace: replace}
+
+	assertPathExists(t, f.Path)
+	fr.HandleFile(f)
+	assertPathExists(t, f.Path)
 }
 
 func TestHandleFileWithFile(t *testing.T) {
@@ -96,7 +116,7 @@ func TestHandleFileWithFile(t *testing.T) {
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
-	assertPathExistsBeforeRename(t, f.Path)
+	assertPathExists(t, f.Path)
 	fr.HandleFile(f)
 	assertPathExistsAfterRename(t, f.Path, expectedPath)
 
@@ -118,7 +138,7 @@ func TestRenameFile(t *testing.T) {
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
-	assertPathExistsBeforeRename(t, f.Path)
+	assertPathExists(t, f.Path)
 	fr.RenameFile(f)
 	assertPathExistsAfterRename(t, f.Path, expectedPath)
 }

@@ -59,9 +59,7 @@ func (fr *findReplace) WalkDir(f *File) {
 	}
 
 	for _, file := range files {
-		if file.Name() != ".git" {
-			fr.HandleFile(NewFile(f.Path + string(os.PathSeparator) + file.Name()))
-		}
+		fr.HandleFile(NewFile(f.Path + string(os.PathSeparator) + file.Name()))
 	}
 }
 
@@ -72,6 +70,11 @@ func (fr *findReplace) WalkDir(f *File) {
 func (fr *findReplace) HandleFile(f *File) {
 	// If file is a directory, recurse immediately (depth-first).
 	if f.Info().IsDir() {
+		// Ignore certain directories
+		if f.Base() == ".git" {
+			return
+		}
+
 		fr.WalkDir(f)
 	} else {
 		// Replace the contents of regular files
