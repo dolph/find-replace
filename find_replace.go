@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -57,7 +58,7 @@ func (fr *findReplace) WalkDir(f *File) {
 	}
 
 	for _, file := range files {
-		fr.HandleFile(NewFile(f.Path + string(os.PathSeparator) + file.Name()))
+		fr.HandleFile(NewFile(filepath.Join(f.Path, file.Name())))
 	}
 }
 
@@ -87,7 +88,7 @@ func (fr *findReplace) HandleFile(f *File) {
 // exist.
 func (fr *findReplace) RenameFile(f *File) {
 	newBaseName := strings.Replace(f.Base(), fr.find, fr.replace, -1)
-	newPath := f.Dir() + string(os.PathSeparator) + newBaseName
+	newPath := filepath.Join(f.Dir(), newBaseName)
 
 	if f.Base() != newBaseName {
 		if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {

@@ -74,7 +74,7 @@ func (f *File) Read() string {
 // Write content to file atomically, by writing it to a temporary file first,
 // and then moving it to the destination, overwriting the original.
 func (f *File) Write(content string) {
-	tempName := f.Dir() + string(os.PathSeparator) + RandomString(20)
+	tempName := filepath.Join(f.Dir(), RandomString(20))
 	if err := os.WriteFile(tempName, []byte(content), f.Mode()); err != nil {
 		log.Fatalf("Error creating tempfile in %v: %v", f.Dir(), err)
 	}

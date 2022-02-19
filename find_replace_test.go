@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -122,45 +123,45 @@ func TestWalkDir(t *testing.T) {
 	fr.WalkDir(d)
 
 	// d1: who/ > fo/
-	d1ExpectedPath := d1.Dir() + string(os.PathSeparator) + strings.Replace(d1.Base(), find, replace, -1)
+	d1ExpectedPath := filepath.Join(d1.Dir(), strings.Replace(d1.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d1.Path, d1ExpectedPath)
 
 	// d1d1: who/what/ > fo/foat/
-	d1d1ExpectedPath := d1ExpectedPath + string(os.PathSeparator) + strings.Replace(d1d1.Base(), find, replace, -1)
+	d1d1ExpectedPath := filepath.Join(d1ExpectedPath, strings.Replace(d1d1.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d1d1.Path, d1d1ExpectedPath)
 
 	// d1d1f1: who/what/when > fo/fat/fen (contains "fere")
-	d1d1f1ExpectedPath := d1d1ExpectedPath + string(os.PathSeparator) + strings.Replace(d1d1f1.Base(), find, replace, -1)
+	d1d1f1ExpectedPath := filepath.Join(d1d1ExpectedPath, strings.Replace(d1d1f1.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d1d1f1.Path, d1d1f1ExpectedPath)
 	assertNewContentsOfFile(t, d1d1f1ExpectedPath, d1d1f1Contents, find, replace, "fere")
 
 	// d2: what/ > fat/
-	d2ExpectedPath := d2.Dir() + string(os.PathSeparator) + strings.Replace(d2.Base(), find, replace, -1)
+	d2ExpectedPath := filepath.Join(d2.Dir(), strings.Replace(d2.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d2.Path, d2ExpectedPath)
 
 	// d2d1: what/when/
-	d2d1ExpectedPath := d2ExpectedPath + string(os.PathSeparator) + strings.Replace(d2d1.Base(), find, replace, -1)
+	d2d1ExpectedPath := filepath.Join(d2ExpectedPath, strings.Replace(d2d1.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d2d1.Path, d2d1ExpectedPath)
 
 	// d2d1d1: what/when/where (directories with no files)
-	d2d1d1ExpectedPath := d2d1ExpectedPath + string(os.PathSeparator) + strings.Replace(d2d1d1.Base(), find, replace, -1)
+	d2d1d1ExpectedPath := filepath.Join(d2d1ExpectedPath, strings.Replace(d2d1d1.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d2d1d1.Path, d2d1d1ExpectedPath)
 
 	// d3: when/
-	d3ExpectedPath := d3.Dir() + string(os.PathSeparator) + strings.Replace(d3.Base(), find, replace, -1)
+	d3ExpectedPath := filepath.Join(d3.Dir(), strings.Replace(d3.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d3.Path, d3ExpectedPath)
 
 	// d3f1: when/where (contains "why")
-	d3f1ExpectedPath := d3ExpectedPath + string(os.PathSeparator) + strings.Replace(d3f1.Base(), find, replace, -1)
+	d3f1ExpectedPath := filepath.Join(d3ExpectedPath, strings.Replace(d3f1.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d3f1.Path, d3f1ExpectedPath)
 	assertNewContentsOfFile(t, d3f1ExpectedPath, d3f1Contents, find, replace, "fy")
 
 	// d4: where/ (empty directory in base dir)
-	d4ExpectedPath := d4.Dir() + string(os.PathSeparator) + strings.Replace(d4.Base(), find, replace, -1)
+	d4ExpectedPath := filepath.Join(d4.Dir(), strings.Replace(d4.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, d4.Path, d4ExpectedPath)
 
 	// f1: why (file in base dir contains "wh\nwh\nwh\n")
-	f1ExpectedPath := f1.Dir() + string(os.PathSeparator) + strings.Replace(f1.Base(), find, replace, -1)
+	f1ExpectedPath := filepath.Join(f1.Dir(), strings.Replace(f1.Base(), find, replace, -1))
 	assertPathExistsAfterRename(t, f1.Path, f1ExpectedPath)
 	assertNewContentsOfFile(t, f1ExpectedPath, f1Contents, find, replace, "f\nf\nf\n")
 }
@@ -173,7 +174,7 @@ func TestHandleFileWithDir(t *testing.T) {
 	f := createTestDir("", initial)
 	defer os.Remove(f.Path)
 	expectedName := strings.Replace(f.Base(), find, replace, -1)
-	expectedPath := f.Dir() + string(os.PathSeparator) + expectedName
+	expectedPath := filepath.Join(f.Dir(), expectedName)
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
@@ -187,7 +188,7 @@ func TestHandleFileWithIgnoredDir(t *testing.T) {
 	find := "git"
 	replace := "got"
 
-	dirPath := os.TempDir() + string(os.PathSeparator) + initial
+	dirPath := filepath.Join(os.TempDir(), initial)
 	if err := os.Mkdir(dirPath, 0700); err != nil {
 		log.Fatal(err)
 	}
@@ -196,7 +197,7 @@ func TestHandleFileWithIgnoredDir(t *testing.T) {
 	// Just in case it's unexpectedly renamed, let's make sure we cleanup the
 	// anticipated name.
 	unexpectedName := strings.Replace(f.Base(), find, replace, -1)
-	unexpectedPath := f.Dir() + string(os.PathSeparator) + unexpectedName
+	unexpectedPath := filepath.Join(f.Dir(), unexpectedName)
 	defer os.Remove(unexpectedPath)
 	fr := findReplace{find: find, replace: replace}
 
@@ -214,7 +215,7 @@ func TestHandleFileWithFile(t *testing.T) {
 	f := createTestFile("", initial, initial)
 	defer os.Remove(f.Path)
 	expectedName := strings.Replace(f.Base(), find, replace, -1)
-	expectedPath := f.Dir() + string(os.PathSeparator) + expectedName
+	expectedPath := filepath.Join(f.Dir(), expectedName)
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
@@ -236,7 +237,7 @@ func TestRenameFile(t *testing.T) {
 	f := createTestFile("", initial, "")
 	defer os.Remove(f.Path)
 	expectedName := strings.Replace(f.Base(), find, replace, -1)
-	expectedPath := f.Dir() + string(os.PathSeparator) + expectedName
+	expectedPath := filepath.Join(f.Dir(), expectedName)
 	defer os.Remove(expectedPath)
 	fr := findReplace{find: find, replace: replace}
 
