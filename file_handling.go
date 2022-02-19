@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/tools/godoc/util"
 )
 
 type File struct {
@@ -51,6 +53,17 @@ func (f *File) Read() string {
 		log.Fatalf("Unable to open %v: %v", f.Path, err)
 	}
 	defer handle.Close()
+
+	// Check if the file looks like text before reading the entire file.
+	var buf [1024]byte
+	n, err := handle.Read(buf[0:])
+	if err != nil || !util.IsText(buf[0:n]) {
+		return ""
+	}
+
+	// Reset file handle so we can read the entire file.
+	handle.Seek(0, 0)
+
 	builder := new(strings.Builder)
 	if _, err := io.Copy(builder, handle); err != nil {
 		log.Fatalf("Failed to read %v to a string: %v", f.Path, err)

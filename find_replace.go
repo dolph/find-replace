@@ -7,8 +7,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"golang.org/x/tools/godoc/util"
 )
 
 // findReplace is a struct used to provide context to all find & replace
@@ -106,9 +104,10 @@ func (fr *findReplace) RenameFile(f *File) {
 // Replaces the contents of the given file, using the find & replace values in
 // context.
 func (fr *findReplace) ReplaceContents(f *File) {
-	// Find & replace the contents of file.
+	// Find & replace the contents of text files. Binary-looking files return
+	// an empty string and will be skipped here.
 	content := f.Read()
-	if util.IsText([]byte(content)) && strings.Contains(content, fr.find) {
+	if strings.Contains(content, fr.find) {
 		newContent := strings.Replace(content, fr.find, fr.replace, -1)
 		f.Write(newContent)
 	}
