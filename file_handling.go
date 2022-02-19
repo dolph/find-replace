@@ -62,7 +62,9 @@ func (f *File) Read() string {
 	}
 
 	// Reset file handle so we can read the entire file.
-	handle.Seek(0, 0)
+	if _, err := handle.Seek(0, io.SeekStart); err != nil {
+		log.Fatalf("Failed to seek back to beginning of %v: %v", f.Path, err)
+	}
 
 	builder := new(strings.Builder)
 	if _, err := io.Copy(builder, handle); err != nil {
