@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -338,4 +339,21 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(f)
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
+}
+
+func BenchmarkNova(b *testing.B) {
+	d := newTestDir("", "*")
+	defer os.Remove(d.Path)
+
+	cmd := exec.Command("git", "clone", "--depth=1", "--single-branch", "git@github.com:openstack/nova.git", ".")
+	cmd.Dir = d.Path
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		b.Errorf("failed to clone repo: %s", out)
+	}
+
+	for n := 0; n < b.N; n++ {
+		fr := findReplace{find: RandomString(2), replace: RandomString(2)}
+		fr.WalkDir(d)
+	}
 }
