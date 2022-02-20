@@ -149,7 +149,7 @@ func TestWalkDir(t *testing.T) {
 
 	// d1d1: who/what/ > fo/foat/
 	d1d1ExpectedPath := filepath.Join(d1ExpectedPath, strings.Replace(d1d1.Base(), fr.find, fr.replace, -1))
-	d1d1 = assertPathExistsAfterRename(t, d1d1, d1d1ExpectedPath)
+	assertPathExistsAfterRename(t, d1d1, d1d1ExpectedPath)
 
 	// d1d1f1: who/what/when > fo/fat/fen (contains "fere")
 	d1d1f1ExpectedPath := filepath.Join(d1d1ExpectedPath, strings.Replace(d1d1f1.Base(), fr.find, fr.replace, -1))
