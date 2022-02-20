@@ -52,6 +52,8 @@ func main() {
 // Walks files in the directory given by dirName, which is a relative path to a
 // directory. Calls HandleFile for each file it finds, if it's not ignored.
 func (fr *findReplace) WalkDir(f *File) {
+	var wg sync.WaitGroup
+
 	// List the files in this directory.
 	files, err := os.ReadDir(f.Path)
 	if err != nil {
@@ -59,8 +61,15 @@ func (fr *findReplace) WalkDir(f *File) {
 	}
 
 	for _, file := range files {
-		fr.HandleFile(NewFile(filepath.Join(f.Path, file.Name())))
+		childFile := NewFile(filepath.Join(f.Path, file.Name()))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fr.HandleFile(childFile)
+		}()
 	}
+
+	wg.Wait() // for (potentially recursive) calls to return
 }
 
 // HandleFile immediately recurses depth-first into directories it finds,
@@ -68,26 +77,17 @@ func (fr *findReplace) WalkDir(f *File) {
 // complete, the file is renamed (if necessary) since no subsequent operations
 // will need to access it again.
 func (fr *findReplace) HandleFile(f *File) {
-	var wg sync.WaitGroup
-
 	// If file is a directory, recurse immediately (depth-first).
 	if f.Info().IsDir() {
 		// Ignore certain directories
 		if f.Base() == ".git" {
 			return
 		}
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			fr.WalkDir(f)
-		}()
+		fr.WalkDir(f)
 	} else {
 		// Replace the contents of regular files
 		fr.ReplaceContents(f)
 	}
-
-	wg.Wait() // for (potentially recursive) WalkDir calls to return
 
 	// Rename the file now that we're otherwise done with it
 	fr.RenameFile(f)
