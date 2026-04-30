@@ -310,7 +310,7 @@ func BenchmarkSyntheticTree(b *testing.B) {
 		// subtree per iteration.
 		b.StopTimer()
 		work := filepath.Join(b.TempDir(), "tree")
-		if err := os.CopyFS(work, os.DirFS(root)); err != nil {
+		if err := copyTree(root, work); err != nil {
 			b.Fatal(err)
 		}
 		b.StartTimer()
@@ -321,4 +321,31 @@ func BenchmarkSyntheticTree(b *testing.B) {
 			b.Fatalf("benchmark reported %d errors", fr.errors)
 		}
 	}
+}
+
+// copyTree recursively copies the regular files and directories under src
+// into dst. Used by benchmarks to set up a fresh working tree without
+// requiring os.CopyFS (Go 1.23+).
+func copyTree(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode().Perm())
+	})
 }
