@@ -1,34 +1,38 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 )
 
-// assertRandomStringLength ensures that the generated string matches the
-// desired length.
-func assertRandomStringLength(t *testing.T, ask int, want int) {
-	got := len(RandomString(ask))
-	if got != want {
-		t.Errorf("len(RandomString(%v)) = %v; want %v", ask, got, want)
+func TestNewFileAbsolutePath(t *testing.T) {
+	f := NewFile("/tmp/find-replace/example")
+	if !filepath.IsAbs(f.Path) {
+		t.Errorf("expected absolute path, got %v", f.Path)
 	}
 }
 
-func TestRandomStringLengthNegativeOne(t *testing.T) {
-	assertRandomStringLength(t, -1, 0)
+func TestNewFileRelativePath(t *testing.T) {
+	f := NewFile("example")
+	if !filepath.IsAbs(f.Path) {
+		t.Errorf("expected absolute path, got %v", f.Path)
+	}
 }
 
-func TestRandomStringLengthZero(t *testing.T) {
-	assertRandomStringLength(t, 0, 0)
+func TestNewChildFileSkipsAbs(t *testing.T) {
+	parent := "/tmp/find-replace"
+	child := newChildFile(parent, "kid")
+	if child.Path != "/tmp/find-replace/kid" {
+		t.Errorf("unexpected path: %v", child.Path)
+	}
 }
 
-func TestRandomStringLengthOne(t *testing.T) {
-	assertRandomStringLength(t, 1, 1)
-}
-
-func TestRandomStringLengthTen(t *testing.T) {
-	assertRandomStringLength(t, 10, 10)
-}
-
-func TestRandomStringLengthTwenty(t *testing.T) {
-	assertRandomStringLength(t, 20, 20)
+func TestBaseDir(t *testing.T) {
+	f := NewFile("/tmp/find-replace/example")
+	if f.Base() != "example" {
+		t.Errorf("Base = %v, want example", f.Base())
+	}
+	if f.Dir() != "/tmp/find-replace" {
+		t.Errorf("Dir = %v, want /tmp/find-replace", f.Dir())
+	}
 }

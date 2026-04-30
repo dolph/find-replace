@@ -2,9 +2,8 @@ package main
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,37 +13,39 @@ import (
  * Testing utilities
  */
 
-// newTestFile creates a file in the given directory path, with the given name
-// and content. If a directory path is not provided, a temp directory is used.
-// If a baseName is not provided, a random file name is generated. Returns the
-// directory where the file was created, the file's directory entry, and the
-// actual name of the file.
-func newTestFile(path string, baseName string, content string) *File {
-	f, err := os.CreateTemp(path, baseName)
+// newTestFile creates a file in the given directory with the given name and
+// content. If baseName is empty a unique random name is used.
+func newTestFile(t testing.TB, dir, baseName, content string) *File {
+	t.Helper()
+	pattern := baseName
+	if pattern == "" {
+		pattern = "*"
+	}
+	f, err := os.CreateTemp(dir, pattern)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	if _, err := f.Write([]byte(content)); err != nil {
-		defer os.Remove(f.Name())
-		log.Fatal(err)
+		_ = f.Close()
+		t.Fatal(err)
 	}
 	if err := f.Close(); err != nil {
-		defer os.Remove(f.Name())
-		log.Fatal(err)
+		t.Fatal(err)
 	}
-
 	return NewFile(f.Name())
 }
 
-// newTestDir creates a directory in the given directory path, with the given
-// base name. If a directory path is not provided, a temp directory is used. If
-// a baseName is not provided, a random file name is generated. Returns the
-// directory where the file was created, the file's directory entry, and the
-// actual name of the file.
-func newTestDir(path string, baseName string) *File {
-	dirPath, err := os.MkdirTemp(path, baseName)
+// newTestDir creates a directory in the given directory path with the given
+// base name (or a random name if empty).
+func newTestDir(t testing.TB, dir, baseName string) *File {
+	t.Helper()
+	pattern := baseName
+	if pattern == "" {
+		pattern = "*"
+	}
+	dirPath, err := os.MkdirTemp(dir, pattern)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	return NewFile(dirPath)
 }
@@ -57,15 +58,15 @@ func expectedPathAfterRename(f *File, fr *findReplace) string {
  * Assertions
  */
 
-// assertFileExists ensures that the given File exists
 func assertFileExists(t *testing.T, f *File) {
+	t.Helper()
 	if _, err := os.Stat(f.Path); errors.Is(err, os.ErrNotExist) {
 		t.Errorf("test file %v does not exist", f.Path)
 	}
 }
 
-// assertFileNonexistent ensures that the File does not exist
 func assertFileNonexistent(t *testing.T, f *File) {
+	t.Helper()
 	if _, err := os.Stat(f.Path); !errors.Is(err, os.ErrNotExist) {
 		if err == nil {
 			t.Errorf("test file %v exists", f.Path)
@@ -76,10 +77,28 @@ func assertFileNonexistent(t *testing.T, f *File) {
 }
 
 func assertPathExistsAfterRename(t *testing.T, f *File, expectedPath string) *File {
+	t.Helper()
 	assertFileNonexistent(t, f)
 	newFile := NewFile(expectedPath)
 	assertFileExists(t, newFile)
 	return newFile
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %v: %v", path, err)
+	}
+	return string(b)
+}
+
+func assertNewContentsOfFile(t *testing.T, path, initial, find, replace, want string) {
+	t.Helper()
+	got := readFile(t, path)
+	if got != want {
+		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
+	}
 }
 
 /*
@@ -87,62 +106,54 @@ func assertPathExistsAfterRename(t *testing.T, f *File, expectedPath string) *Fi
  */
 
 // TestWalkDir is the most important test of the entire suite, because it
-// exercises all the basic functionality of the app. It builds a directory tree
-// of temporary files and directories, walks the entire tree, and ensures that
-// all files and directories are appropriately renamed at at the end, and all
-// files contain the correct contents.
+// exercises all the basic functionality of the app. It builds a directory
+// tree of temporary files and directories, walks the entire tree, and ensures
+// that all files and directories are appropriately renamed and contain the
+// correct contents.
 func TestWalkDir(t *testing.T) {
 	find := "wh"
 	replace := "f"
 
-	d := newTestDir("", "*")
-	defer os.Remove(d.Path)
+	d := NewFile(t.TempDir())
 
 	// d1: who/
-	d1 := newTestDir(d.Path, "who")
-	defer os.Remove(d1.Path)
+	d1 := newTestDir(t, d.Path, "who")
 
 	// d1d1: who/what/
-	d1d1 := newTestDir(d1.Path, "what")
-	defer os.Remove(d1d1.Path)
+	d1d1 := newTestDir(t, d1.Path, "what")
 
 	// d1d1f1: who/what/when (contains "where")
 	d1d1f1Contents := "where"
-	d1d1f1 := newTestFile(d1d1.Path, "when", d1d1f1Contents)
-	defer os.Remove(d1d1f1.Path)
+	d1d1f1 := newTestFile(t, d1d1.Path, "when", d1d1f1Contents)
 
 	// d2: what/
-	d2 := newTestDir(d.Path, "what")
-	defer os.Remove(d2.Path)
+	d2 := newTestDir(t, d.Path, "what")
 
 	// d2d1: what/when/
-	d2d1 := newTestDir(d2.Path, "when")
-	defer os.Remove(d2d1.Path)
+	d2d1 := newTestDir(t, d2.Path, "when")
 
 	// d2d1d1: what/when/where (directories with no files)
-	d2d1d1 := newTestDir(d2d1.Path, "where")
-	defer os.Remove(d2d1d1.Path)
+	d2d1d1 := newTestDir(t, d2d1.Path, "where")
 
 	// d3: when/
-	d3 := newTestDir(d.Path, "when")
-	defer os.Remove(d3.Path)
+	d3 := newTestDir(t, d.Path, "when")
 
 	// d3f1: when/where (contains "why")
 	d3f1Contents := "why"
-	d3f1 := newTestFile(d3.Path, "where", d3f1Contents)
-	defer os.Remove(d3f1.Path)
+	d3f1 := newTestFile(t, d3.Path, "where", d3f1Contents)
 
 	// d4: where/ (empty directory in base dir)
-	d4 := newTestDir(d.Path, "where")
-	defer os.Remove(d4.Path)
+	d4 := newTestDir(t, d.Path, "where")
 
 	// f1: why (file in base dir contains "wh")
 	f1Contents := "wh\nwh\nwh\n"
-	f1 := newTestFile(d.Path, "why", f1Contents)
-	defer os.Remove(f1.Path)
+	f1 := newTestFile(t, d.Path, "why", f1Contents)
 
 	fr := findReplace{find: find, replace: replace}
 	fr.WalkDir(d)
+	if fr.errors != 0 {
+		t.Fatalf("walk reported %d errors", fr.errors)
+	}
 
 	// d1: who/ > fo/
 	d1ExpectedPath := expectedPathAfterRename(d1, &fr)
@@ -188,179 +199,126 @@ func TestWalkDir(t *testing.T) {
 	assertNewContentsOfFile(t, f1ExpectedPath, f1Contents, find, replace, "f\nf\nf\n")
 }
 
-func TestHandleFileWithDir(t *testing.T) {
-	initial := "alpha"
-	find := "ph"
-	replace := "f"
-
-	f := newTestDir("", initial)
-	defer os.Remove(f.Path)
-	expectedPath := filepath.Join(f.Dir(), strings.Replace(f.Base(), find, replace, -1))
-	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
-
-	assertFileExists(t, f)
-	fr.HandleFile(f)
-	assertPathExistsAfterRename(t, f, expectedPath)
-}
-
-func TestHandleFileWithIgnoredDir(t *testing.T) {
-	initial := ".git"
-	find := "git"
-	replace := "got"
-
-	dirPath := filepath.Join(os.TempDir(), initial)
-	if err := os.Mkdir(dirPath, 0700); err != nil {
-		log.Fatal(err)
+func TestIgnoredGitDir(t *testing.T) {
+	root := t.TempDir()
+	gitDir := filepath.Join(root, ".git")
+	if err := os.Mkdir(gitDir, 0o700); err != nil {
+		t.Fatal(err)
 	}
-	f := NewFile(dirPath)
-	defer os.Remove(f.Path)
-	// Just in case it's unexpectedly renamed, let's make sure we cleanup the
-	// anticipated name.
-	unexpectedName := strings.Replace(f.Base(), find, replace, -1)
-	unexpectedPath := filepath.Join(f.Dir(), unexpectedName)
-	defer os.Remove(unexpectedPath)
-	fr := findReplace{find: find, replace: replace}
+	gitFile := filepath.Join(gitDir, "config")
+	if err := os.WriteFile(gitFile, []byte("git contents"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-	assertFileExists(t, f)
-	fr.HandleFile(f)
-	assertFileExists(t, f)
-}
+	fr := findReplace{find: "git", replace: "got"}
+	fr.WalkDir(NewFile(root))
+	if fr.errors != 0 {
+		t.Fatalf("walk reported %d errors", fr.errors)
+	}
 
-func TestHandleFileWithFile(t *testing.T) {
-	initial := "alpha"
-	find := "ph"
-	replace := "f"
-	want := "alfa"
-
-	f := newTestFile("", initial, initial)
-	defer os.Remove(f.Path)
-	expectedName := strings.Replace(f.Base(), find, replace, -1)
-	expectedPath := filepath.Join(f.Dir(), expectedName)
-	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
-
-	assertFileExists(t, f)
-	fr.HandleFile(f)
-	assertPathExistsAfterRename(t, f, expectedPath)
-
-	got := NewFile(expectedPath).Read()
-	if got != want {
-		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
+	// The .git directory must remain unchanged.
+	if _, err := os.Stat(gitDir); err != nil {
+		t.Errorf(".git was renamed/removed: %v", err)
+	}
+	if got := readFile(t, gitFile); got != "git contents" {
+		t.Errorf(".git/config was rewritten: %q", got)
 	}
 }
 
-func TestRenameFile(t *testing.T) {
-	initial := "alpha"
-	find := "ph"
-	replace := "f"
+func TestRenameSingleFile(t *testing.T) {
+	d := t.TempDir()
+	f := newTestFile(t, d, "alpha", "")
 
-	f := newTestFile("", initial, "")
-	defer os.Remove(f.Path)
-	expectedName := strings.Replace(f.Base(), find, replace, -1)
-	expectedPath := filepath.Join(f.Dir(), expectedName)
-	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: "ph", replace: "f"}
+	expectedPath := filepath.Join(f.Dir(), strings.Replace(f.Base(), fr.find, fr.replace, -1))
 
-	assertFileExists(t, f)
-	fr.RenameFile(f)
+	fr.WalkDir(NewFile(d))
 	assertPathExistsAfterRename(t, f, expectedPath)
-}
-
-// assertNewContentsOfFile ensures that the contents of the file at the given
-// path exactly match the desired string.
-func assertNewContentsOfFile(t *testing.T, path string, initial string, find string, replace string, want string) {
-	got := NewFile(path).Read()
-	if got != want {
-		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
-	}
 }
 
 func TestReplaceContents(t *testing.T) {
-	initial := "alpha"
-	find := "ph"
-	replace := "f"
-	want := "alfa"
+	d := t.TempDir()
+	f := newTestFile(t, d, "*", "alpha")
 
-	f := newTestFile("", "*", initial)
-	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(f)
-	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
+	fr := findReplace{find: "ph", replace: "f"}
+	fr.WalkDir(NewFile(d))
+	assertNewContentsOfFile(t, f.Path, "alpha", "ph", "f", "alfa")
 }
 
 func TestReplaceContentsEntireFile(t *testing.T) {
-	initial := "alpha"
-	find := "alpha"
-	replace := "beta"
-	want := "beta"
+	d := t.TempDir()
+	f := newTestFile(t, d, "*", "alpha")
 
-	f := newTestFile("", "*", initial)
-	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(f)
-	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
+	fr := findReplace{find: "alpha", replace: "beta"}
+	fr.WalkDir(NewFile(d))
+	assertNewContentsOfFile(t, f.Path, "alpha", "alpha", "beta", "beta")
 }
 
 func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
-	initial := "alphaalpha"
-	find := "ph"
-	replace := "f"
-	want := "alfaalfa"
+	d := t.TempDir()
+	f := newTestFile(t, d, "*", "alphaalpha")
 
-	f := newTestFile("", "*", initial)
-	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(f)
-	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
+	fr := findReplace{find: "ph", replace: "f"}
+	fr.WalkDir(NewFile(d))
+	assertNewContentsOfFile(t, f.Path, "alphaalpha", "ph", "f", "alfaalfa")
 }
 
 func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
-	initial := "alpha\nalpha"
-	find := "ph"
-	replace := "f"
-	want := "alfa\nalfa"
+	d := t.TempDir()
+	f := newTestFile(t, d, "*", "alpha\nalpha")
 
-	f := newTestFile("", "*", initial)
-	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(f)
-	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
+	fr := findReplace{find: "ph", replace: "f"}
+	fr.WalkDir(NewFile(d))
+	assertNewContentsOfFile(t, f.Path, "alpha\nalpha", "ph", "f", "alfa\nalfa")
 }
 
 func TestReplaceContentsNoMatches(t *testing.T) {
-	initial := "alpha"
-	find := "abc"
-	replace := "xyz"
-	want := "alpha"
+	d := t.TempDir()
+	f := newTestFile(t, d, "*", "alpha")
 
-	f := newTestFile("", "*", initial)
-	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
-	fr.ReplaceContents(f)
-	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
+	fr := findReplace{find: "abc", replace: "xyz"}
+	fr.WalkDir(NewFile(d))
+	assertNewContentsOfFile(t, f.Path, "alpha", "abc", "xyz", "alpha")
 }
 
-func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
-	d := newTestDir("", "*")
-	defer os.Remove(d.Path)
+// BenchmarkSyntheticTree benchmarks find-replace against a synthetic tree of
+// files with controlled size so the benchmark is reproducible and not network-
+// bound.
+func BenchmarkSyntheticTree(b *testing.B) {
+	const dirs = 10
+	const filesPerDir = 100
+	const fileBytes = 4 * 1024
 
-	cmd := exec.Command("git", "clone", "--depth=1", "--single-branch", repoUrl, ".")
-	cmd.Dir = d.Path
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		b.Errorf("failed to clone repo: %s", out)
+	root := b.TempDir()
+	body := strings.Repeat("alpha beta gamma\n", fileBytes/16)
+	for i := 0; i < dirs; i++ {
+		dir := filepath.Join(root, fmt.Sprintf("dir-alpha-%d", i))
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			b.Fatal(err)
+		}
+		for j := 0; j < filesPerDir; j++ {
+			path := filepath.Join(dir, fmt.Sprintf("file-alpha-%d.txt", j))
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				b.Fatal(err)
+			}
+		}
 	}
 
-	return d
-}
-
-func BenchmarkNova(b *testing.B) {
+	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		// We can't safely rerun with rename in place, so use a fresh
+		// subtree per iteration.
 		b.StopTimer()
-		d := CloneRepoToTestDir(b, "git@github.com:openstack/nova.git")
-		fr := findReplace{find: RandomString(2), replace: RandomString(2)}
+		work := filepath.Join(b.TempDir(), "tree")
+		if err := os.CopyFS(work, os.DirFS(root)); err != nil {
+			b.Fatal(err)
+		}
 		b.StartTimer()
-		fr.WalkDir(d)
+
+		fr := findReplace{find: "alpha", replace: "BETA"}
+		fr.WalkDir(NewFile(work))
+		if fr.errors != 0 {
+			b.Fatalf("benchmark reported %d errors", fr.errors)
+		}
 	}
 }

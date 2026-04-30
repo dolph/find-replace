@@ -2,7 +2,7 @@
 set -e
 
 # Vet
-go vet
+go vet ./...
 
 # Build
 GIT_COMMIT="$(git rev-parse --short $(git rev-list -1 HEAD))"
@@ -27,5 +27,5 @@ go build \
         -X 'main.BuildTainted=$BUILD_TAINTED'" \
     ./...
 
-# Test
-go test -cover -v ./...
+# Test (with race detector to catch concurrency bugs).
+go test -race -cover -v ./...
