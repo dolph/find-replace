@@ -16,8 +16,22 @@ Renaming ./alphabet to betabet
 * Files and directories are renamed.
 * Searches are performed recursively from the current working directory.
 * Searches are case sensitive.
-* `.git/` directories are skipped.
-* Binary files are ignored.
+* `.git` is always skipped (whether it's a directory or a worktree-linkage file).
+* Binary files (those with a NUL byte or invalid UTF-8 in the first 1 KiB) are ignored.
+* Symbolic links are not followed and not rewritten.
+* Files with the setuid or setgid bit set are not rewritten.
+* Original mode, owner/group, and modification time are preserved across rewrites.
+* Exits non-zero if any file failed to be rewritten or renamed (the rest of the tree is still processed on a best-effort basis).
+
+## Security model
+
+`find-replace` is designed to be safe to run inside an untrusted directory:
+
+* It will never traverse out of the working tree through a symbolic link.
+* Temp files used during rewrites are created with `O_EXCL` under a `crypto/rand`-generated name, so a co-resident attacker cannot pre-create the temp-file path to redirect the write.
+* Renames refuse to overwrite an existing destination (implemented as a hardlink + remove pair, so the existence check and the directory-entry creation are a single step).
+
+When run as root, `find-replace` preserves the original uid/gid of every rewritten file. Files with `setuid`/`setgid` bits are skipped to avoid producing a setuid binary owned by the wrong user.
 
 ## Goal
 

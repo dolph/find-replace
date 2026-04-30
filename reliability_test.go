@@ -117,7 +117,7 @@ func TestBigFileStreamsThroughBoundedMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changed, err := rewriteFile(path, []byte("bravo"), []byte("BB"), 0o600)
+	changed, err := rewriteFile(path, []byte("bravo"), []byte("BB"), statOrFail(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,4 +145,58 @@ func buildBinary(t *testing.T) string {
 		t.Fatalf("build failed: %v\n%s", err, out)
 	}
 	return bin
+}
+
+// TestGitAsFileNotRewritten verifies that a `.git` file (worktree/submodule
+// linkage) is skipped, not rewritten. See issue #19.
+func TestGitAsFileNotRewritten(t *testing.T) {
+	root := t.TempDir()
+	gitFile := filepath.Join(root, ".git")
+	original := "gitdir: ../some-other-dir/.git/worktrees/me\n"
+	if err := os.WriteFile(gitFile, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fr := findReplace{find: "gitdir", replace: "WAS_REWRITTEN"}
+	fr.WalkDir(NewFile(root))
+	if fr.errors != 0 {
+		t.Fatalf("walk reported %d errors", fr.errors)
+	}
+
+	got, err := os.ReadFile(gitFile)
+	if err != nil {
+		t.Fatalf(".git file disappeared: %v", err)
+	}
+	if string(got) != original {
+		t.Errorf(".git file was rewritten: %q", got)
+	}
+}
+
+// TestStaleTempFilesSkipped verifies that orphan .find-replace-* files from a
+// crashed prior run are not picked up as targets. See issue #21.
+func TestStaleTempFilesSkipped(t *testing.T) {
+	root := t.TempDir()
+
+	stale := filepath.Join(root, ".find-replace-orphan-alpha")
+	if err := os.WriteFile(stale, []byte("alpha"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	regular := filepath.Join(root, "alpha.txt")
+	if err := os.WriteFile(regular, []byte("alpha"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fr := findReplace{find: "alpha", replace: "BETA"}
+	fr.WalkDir(NewFile(root))
+
+	// The stale temp file must remain — neither rewritten nor renamed.
+	if got, _ := os.ReadFile(stale); string(got) != "alpha" {
+		t.Errorf("stale temp file was rewritten: %q", got)
+	}
+
+	// The regular file was rewritten and renamed.
+	got, _ := os.ReadFile(filepath.Join(root, "BETA.txt"))
+	if string(got) != "BETA" {
+		t.Errorf("regular file not rewritten/renamed: %q", got)
+	}
 }

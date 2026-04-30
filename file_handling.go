@@ -65,7 +65,22 @@ func renameNoReplace(src, dst string) error {
 // Files that look binary in their first sniffSize bytes are skipped. Files
 // that contain no occurrences of find are also skipped (no temp file is
 // written).
-func rewriteFile(path string, find, replace []byte, mode os.FileMode) (changed bool, err error) {
+//
+// The original mode (including setuid/setgid/sticky bits), owner/group, and
+// modification time are preserved on the rewritten inode. Setuid bits will
+// still be cleared by the kernel if the temp file's uid differs from the
+// original; passing info from the caller lets us reapply ownership before
+// the rename to minimize the window.
+func rewriteFile(path string, find, replace []byte, info os.FileInfo) (changed bool, err error) {
+	// Refuse to rewrite files with setuid/setgid bits. We cannot reliably
+	// preserve those bits across a tempfile-and-rename: the kernel strips
+	// them on any uid change, and producing a setuid binary owned by the
+	// running user from one we found owned by someone else would be a
+	// privilege footgun. Better to leave such files alone.
+	if info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
+		return false, fmt.Errorf("refusing to rewrite %s: setuid/setgid bit is set", path)
+	}
+
 	// We have to know whether the content needs rewriting before we create a
 	// temp file (otherwise we'd thrash the filesystem on every no-op file).
 	// Read the prefix, sniff it, and remember it so we don't have to seek
@@ -116,12 +131,6 @@ func rewriteFile(path string, find, replace []byte, mode os.FileMode) (changed b
 		}
 	}()
 
-	// Restore the original mode on the temp file (CreateTemp uses 0600).
-	if err = os.Chmod(tmpName, mode.Perm()); err != nil {
-		_ = tmp.Close()
-		return false, err
-	}
-
 	// Stream the rest of the file, prepending the prefix we already read.
 	rest := io.MultiReader(bytes.NewReader(prefix), in)
 	wrote, err := streamReplace(tmp, rest, find, replace)
@@ -139,6 +148,13 @@ func rewriteFile(path string, find, replace []byte, mode os.FileMode) (changed b
 	if !wrote.changed {
 		// Nothing actually replaced; leave the original alone.
 		return false, nil
+	}
+
+	// Preserve metadata before the rename. Order: chown first (so that the
+	// later chmod doesn't get its setuid/setgid bits cleared by a uid
+	// change), then chmod, then chtimes.
+	if err = preserveMetadata(tmpName, info); err != nil {
+		return false, err
 	}
 
 	if err = os.Rename(tmpName, path); err != nil {
@@ -226,4 +242,24 @@ func streamReplace(w io.Writer, r io.Reader, find, replace []byte) (rewriteStats
 		copy(buf, buf[safeEnd:end])
 		keep = end - safeEnd
 	}
+}
+
+// preserveMetadata copies mode, ownership, and modification time from info
+// onto path. Best-effort: a failure to chown when not running as root is
+// expected (no CAP_CHOWN) and not treated as an error; other failures abort
+// the rewrite.
+func preserveMetadata(path string, info os.FileInfo) error {
+	// chown first: changing ownership can clear setuid/setgid bits on some
+	// systems, so we want to apply the mode after chown.
+	if err := chownToOriginal(path, info); err != nil {
+		return err
+	}
+	// Mode includes Perm and the special bits (setuid, setgid, sticky).
+	if err := os.Chmod(path, info.Mode()&os.ModePerm|info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky)); err != nil {
+		return err
+	}
+	if err := os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
+		return err
+	}
+	return nil
 }

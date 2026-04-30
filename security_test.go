@@ -4,9 +4,25 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
+
+func statSysOrSkip(t *testing.T, path string) *syscall.Stat_t {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Skip("syscall.Stat_t not available on this platform")
+	}
+	return st
+}
 
 // TestSymlinkNotFollowed verifies that find-replace does not follow symbolic
 // links out of the current working tree. Following symlinks would let any
@@ -119,7 +135,7 @@ func TestTempfileSymlinkAttackRefuses(t *testing.T) {
 		_ = os.Symlink(victim, linkName)
 	}
 
-	changed, err := rewriteFile(target, []byte("alpha"), []byte("BETA"), 0o600)
+	changed, err := rewriteFile(target, []byte("alpha"), []byte("BETA"), statOrFail(t, target))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,5 +186,111 @@ func TestRenameRefusesOverwrite(t *testing.T) {
 	// And we should have recorded an error.
 	if fr.errors == 0 {
 		t.Error("expected fr.errors > 0 when refusing rename")
+	}
+}
+
+// TestRewritePreservesMtime verifies the rewrite preserves the original
+// modification time. See issue #23.
+func TestRewritePreservesMtime(t *testing.T) {
+	d := t.TempDir()
+	path := filepath.Join(d, "f.txt")
+	if err := os.WriteFile(path, []byte("alpha"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stat0, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Roll mtime back so the test catches a real preservation rather than
+	// a coincidence (writing now and rewriting now are likely close enough
+	// to pass a coarser-grained check).
+	past := stat0.ModTime().Add(-2 * time.Hour)
+	if err := os.Chtimes(path, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), statOrFail(t, path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected change=true")
+	}
+
+	stat1, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stat1.ModTime().Equal(past) {
+		t.Errorf("mtime not preserved: got %v want %v", stat1.ModTime(), past)
+	}
+}
+
+// TestRewritePreservesOwner verifies that on Linux the rewrite preserves the
+// original Uid and Gid. Only meaningful when running as root over files owned
+// by other uids; otherwise we just check that the uid/gid are unchanged.
+// See issue #17.
+func TestRewritePreservesOwner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ownership semantics differ on windows")
+	}
+	d := t.TempDir()
+	path := filepath.Join(d, "f.txt")
+	if err := os.WriteFile(path, []byte("alpha"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stat0 := statSysOrSkip(t, path)
+
+	if os.Getuid() == 0 {
+		// Chown to a non-root uid we can use to make the test meaningful.
+		// 'nobody' (65534) is universally available.
+		if err := os.Chown(path, 65534, 65534); err != nil {
+			t.Skipf("cannot chown to nobody: %v", err)
+		}
+		stat0 = statSysOrSkip(t, path)
+	}
+
+	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), statOrFail(t, path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected change=true")
+	}
+
+	stat1 := statSysOrSkip(t, path)
+	if stat1.Uid != stat0.Uid || stat1.Gid != stat0.Gid {
+		t.Errorf("ownership not preserved: got uid=%d gid=%d want uid=%d gid=%d",
+			stat1.Uid, stat1.Gid, stat0.Uid, stat0.Gid)
+	}
+}
+
+// TestRefusesSetuidFile verifies that files with setuid/setgid bits are not
+// rewritten. See issue #18.
+func TestRefusesSetuidFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("setuid not applicable on windows")
+	}
+	d := t.TempDir()
+	path := filepath.Join(d, "setuid")
+	if err := os.WriteFile(path, []byte("alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o755|os.ModeSetuid); err != nil {
+		t.Skipf("cannot set setuid bit: %v", err)
+	}
+	// Verify the bit actually stuck (some sandboxes silently strip setuid).
+	if info, err := os.Stat(path); err != nil || info.Mode()&os.ModeSetuid == 0 {
+		t.Skipf("setuid bit was stripped by the filesystem")
+	}
+
+	_, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), statOrFail(t, path))
+	if err == nil {
+		t.Error("expected an error for setuid file")
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "alpha" {
+		t.Errorf("setuid file was rewritten: %q", got)
 	}
 }

@@ -12,13 +12,21 @@ import (
 
 // findReplace carries the parameters and counters for a single run.
 type findReplace struct {
-	find    string
-	replace string
-	errors  int
+	find         string
+	replace      string
+	findBytes    []byte // pre-computed []byte form of find, reused per file
+	replaceBytes []byte // pre-computed []byte form of replace, reused per file
+	errors       int
 }
 
-// Skipped directory base names. Kept simple and easy to extend.
-var skipDirs = map[string]struct{}{
+// Reserved tempfile prefix used by rewriteFile. Skipped during traversal so
+// orphans from a crashed prior run don't get picked up as targets.
+const tempPrefix = ".find-replace-"
+
+// Skipped base names. These are skipped whether the entry is a file or a
+// directory: `.git` in particular can be either a directory (a normal repo)
+// or a file (a worktree/submodule pointing at the real `.git` elsewhere).
+var skipNames = map[string]struct{}{
 	".git": {},
 }
 
@@ -40,7 +48,12 @@ func main() {
 		log.Fatal("FIND and REPLACE are identical; nothing to do")
 	}
 
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{
+		find:         find,
+		replace:      replace,
+		findBytes:    []byte(find),
+		replaceBytes: []byte(replace),
+	}
 	fr.WalkDir(NewFile("."))
 
 	if fr.errors > 0 {
@@ -53,6 +66,13 @@ func main() {
 // to keep memory and file-descriptor usage bounded and to avoid races between
 // concurrent renames in the same parent directory.
 func (fr *findReplace) WalkDir(f *File) {
+	// Pre-compute byte forms once so we don't reallocate them per file.
+	if fr.findBytes == nil {
+		fr.findBytes = []byte(fr.find)
+	}
+	if fr.replaceBytes == nil {
+		fr.replaceBytes = []byte(fr.replace)
+	}
 	entries, err := os.ReadDir(f.Path)
 	if err != nil {
 		fr.recordErr(fmt.Errorf("read directory %s: %w", f.Path, err))
@@ -71,6 +91,15 @@ func (fr *findReplace) handleEntry(parent *File, entry fs.DirEntry) {
 	name := entry.Name()
 	mode := entry.Type()
 
+	// Skip our own orphaned tempfiles from a prior crashed run.
+	if strings.HasPrefix(name, tempPrefix) {
+		return
+	}
+	// Skip names like `.git` regardless of file vs directory: a `.git` file
+	// is the worktree/submodule linkage and rewriting it corrupts the link.
+	if _, skip := skipNames[name]; skip {
+		return
+	}
 	// Symlinks are skipped entirely (issue #2). We never follow them and we
 	// don't rewrite or rename them — renaming a symlink only renames the
 	// link itself, which is harmless, but skipping is clearer and avoids
@@ -82,9 +111,6 @@ func (fr *findReplace) handleEntry(parent *File, entry fs.DirEntry) {
 	child := newChildFile(parent.Path, name)
 
 	if entry.IsDir() {
-		if _, skip := skipDirs[name]; skip {
-			return
-		}
 		fr.WalkDir(child)
 	} else if mode.IsRegular() {
 		fr.rewriteContents(child, entry)
@@ -109,7 +135,7 @@ func (fr *findReplace) rewriteContents(f *File, entry fs.DirEntry) {
 		return
 	}
 
-	changed, err := rewriteFile(f.Path, []byte(fr.find), []byte(fr.replace), info.Mode())
+	changed, err := rewriteFile(f.Path, fr.findBytes, fr.replaceBytes, info)
 	if err != nil {
 		fr.recordErr(fmt.Errorf("rewrite %s: %w", f.Path, err))
 		return

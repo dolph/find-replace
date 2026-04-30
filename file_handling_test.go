@@ -9,6 +9,15 @@ import (
 	"testing"
 )
 
+func statOrFail(t testing.TB, path string) os.FileInfo {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info
+}
+
 func TestLooksBinary(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -103,7 +112,7 @@ func TestRewriteFileSkipsBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), 0o600)
+	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), statOrFail(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +133,7 @@ func TestRewriteFileNoMatchLeavesOriginalUntouched(t *testing.T) {
 	}
 	stat0, _ := os.Stat(path)
 
-	changed, err := rewriteFile(path, []byte("xyz"), []byte("abc"), 0o600)
+	changed, err := rewriteFile(path, []byte("xyz"), []byte("abc"), statOrFail(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +164,7 @@ func TestRewriteFileLeavesNoTempfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), 0o600)
+	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), statOrFail(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +189,7 @@ func TestRewriteFilePreservesMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), 0o640)
+	changed, err := rewriteFile(path, []byte("alpha"), []byte("BETA"), statOrFail(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
