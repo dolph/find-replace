@@ -5,7 +5,7 @@ the single source of truth — `CLAUDE.md` imports it.
 
 ## What this project is
 
-`find-replace` is a small Go CLI (~400 LoC, single binary) that recursively
+`find-replace` is a small Go CLI (single binary) that recursively
 finds and replaces a string across both file contents *and* file/directory
 names, rooted at `$PWD`. Files with matching contents are atomically
 rewritten via a temp-file + rename; `.git/` is skipped; binary files are
