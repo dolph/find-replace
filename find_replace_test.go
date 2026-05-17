@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,18 +18,19 @@ import (
 // If a baseName is not provided, a random file name is generated. Returns the
 // directory where the file was created, the file's directory entry, and the
 // actual name of the file.
-func newTestFile(path string, baseName string, content string) *File {
+func newTestFile(tb testing.TB, path string, baseName string, content string) *File {
+	tb.Helper()
 	f, err := os.CreateTemp(path, baseName)
 	if err != nil {
-		log.Fatal(err)
+		tb.Fatal(err)
 	}
 	if _, err := f.Write([]byte(content)); err != nil {
-		defer os.Remove(f.Name())
-		log.Fatal(err)
+		_ = os.Remove(f.Name())
+		tb.Fatal(err)
 	}
 	if err := f.Close(); err != nil {
-		defer os.Remove(f.Name())
-		log.Fatal(err)
+		_ = os.Remove(f.Name())
+		tb.Fatal(err)
 	}
 
 	return NewFile(f.Name())
@@ -41,10 +41,11 @@ func newTestFile(path string, baseName string, content string) *File {
 // a baseName is not provided, a random file name is generated. Returns the
 // directory where the file was created, the file's directory entry, and the
 // actual name of the file.
-func newTestDir(path string, baseName string) *File {
+func newTestDir(tb testing.TB, path string, baseName string) *File {
+	tb.Helper()
 	dirPath, err := os.MkdirTemp(path, baseName)
 	if err != nil {
-		log.Fatal(err)
+		tb.Fatal(err)
 	}
 	return NewFile(dirPath)
 }
@@ -59,6 +60,7 @@ func expectedPathAfterRename(f *File, fr *findReplace) string {
 
 // assertFileExists ensures that the given File exists
 func assertFileExists(t *testing.T, f *File) {
+	t.Helper()
 	if _, err := os.Stat(f.Path); errors.Is(err, os.ErrNotExist) {
 		t.Errorf("test file %v does not exist", f.Path)
 	}
@@ -66,6 +68,7 @@ func assertFileExists(t *testing.T, f *File) {
 
 // assertFileNonexistent ensures that the File does not exist
 func assertFileNonexistent(t *testing.T, f *File) {
+	t.Helper()
 	if _, err := os.Stat(f.Path); !errors.Is(err, os.ErrNotExist) {
 		if err == nil {
 			t.Errorf("test file %v exists", f.Path)
@@ -76,6 +79,7 @@ func assertFileNonexistent(t *testing.T, f *File) {
 }
 
 func assertPathExistsAfterRename(t *testing.T, f *File, expectedPath string) *File {
+	t.Helper()
 	assertFileNonexistent(t, f)
 	newFile := NewFile(expectedPath)
 	assertFileExists(t, newFile)
@@ -95,50 +99,50 @@ func TestWalkDir(t *testing.T) {
 	find := "wh"
 	replace := "f"
 
-	d := newTestDir("", "*")
+	d := newTestDir(t, "", "*")
 	defer os.Remove(d.Path)
 
 	// d1: who/
-	d1 := newTestDir(d.Path, "who")
+	d1 := newTestDir(t, d.Path, "who")
 	defer os.Remove(d1.Path)
 
 	// d1d1: who/what/
-	d1d1 := newTestDir(d1.Path, "what")
+	d1d1 := newTestDir(t, d1.Path, "what")
 	defer os.Remove(d1d1.Path)
 
 	// d1d1f1: who/what/when (contains "where")
 	d1d1f1Contents := "where"
-	d1d1f1 := newTestFile(d1d1.Path, "when", d1d1f1Contents)
+	d1d1f1 := newTestFile(t, d1d1.Path, "when", d1d1f1Contents)
 	defer os.Remove(d1d1f1.Path)
 
 	// d2: what/
-	d2 := newTestDir(d.Path, "what")
+	d2 := newTestDir(t, d.Path, "what")
 	defer os.Remove(d2.Path)
 
 	// d2d1: what/when/
-	d2d1 := newTestDir(d2.Path, "when")
+	d2d1 := newTestDir(t, d2.Path, "when")
 	defer os.Remove(d2d1.Path)
 
 	// d2d1d1: what/when/where (directories with no files)
-	d2d1d1 := newTestDir(d2d1.Path, "where")
+	d2d1d1 := newTestDir(t, d2d1.Path, "where")
 	defer os.Remove(d2d1d1.Path)
 
 	// d3: when/
-	d3 := newTestDir(d.Path, "when")
+	d3 := newTestDir(t, d.Path, "when")
 	defer os.Remove(d3.Path)
 
 	// d3f1: when/where (contains "why")
 	d3f1Contents := "why"
-	d3f1 := newTestFile(d3.Path, "where", d3f1Contents)
+	d3f1 := newTestFile(t, d3.Path, "where", d3f1Contents)
 	defer os.Remove(d3f1.Path)
 
 	// d4: where/ (empty directory in base dir)
-	d4 := newTestDir(d.Path, "where")
+	d4 := newTestDir(t, d.Path, "where")
 	defer os.Remove(d4.Path)
 
 	// f1: why (file in base dir contains "wh")
 	f1Contents := "wh\nwh\nwh\n"
-	f1 := newTestFile(d.Path, "why", f1Contents)
+	f1 := newTestFile(t, d.Path, "why", f1Contents)
 	defer os.Remove(f1.Path)
 
 	fr := findReplace{find: find, replace: replace}
@@ -193,7 +197,7 @@ func TestHandleFileWithDir(t *testing.T) {
 	find := "ph"
 	replace := "f"
 
-	f := newTestDir("", initial)
+	f := newTestDir(t, "", initial)
 	defer os.Remove(f.Path)
 	expectedPath := filepath.Join(f.Dir(), strings.Replace(f.Base(), find, replace, -1))
 	defer os.Remove(expectedPath)
@@ -211,7 +215,7 @@ func TestHandleFileWithIgnoredDir(t *testing.T) {
 
 	dirPath := filepath.Join(os.TempDir(), initial)
 	if err := os.Mkdir(dirPath, 0700); err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	f := NewFile(dirPath)
 	defer os.Remove(f.Path)
@@ -233,7 +237,7 @@ func TestHandleFileWithFile(t *testing.T) {
 	replace := "f"
 	want := "alfa"
 
-	f := newTestFile("", initial, initial)
+	f := newTestFile(t, "", initial, initial)
 	defer os.Remove(f.Path)
 	expectedName := strings.Replace(f.Base(), find, replace, -1)
 	expectedPath := filepath.Join(f.Dir(), expectedName)
@@ -255,7 +259,7 @@ func TestRenameFile(t *testing.T) {
 	find := "ph"
 	replace := "f"
 
-	f := newTestFile("", initial, "")
+	f := newTestFile(t, "", initial, "")
 	defer os.Remove(f.Path)
 	expectedName := strings.Replace(f.Base(), find, replace, -1)
 	expectedPath := filepath.Join(f.Dir(), expectedName)
@@ -270,6 +274,7 @@ func TestRenameFile(t *testing.T) {
 // assertNewContentsOfFile ensures that the contents of the file at the given
 // path exactly match the desired string.
 func assertNewContentsOfFile(t *testing.T, path string, initial string, find string, replace string, want string) {
+	t.Helper()
 	got := NewFile(path).Read()
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
@@ -282,7 +287,7 @@ func TestReplaceContents(t *testing.T) {
 	replace := "f"
 	want := "alfa"
 
-	f := newTestFile("", "*", initial)
+	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(f)
@@ -295,7 +300,7 @@ func TestReplaceContentsEntireFile(t *testing.T) {
 	replace := "beta"
 	want := "beta"
 
-	f := newTestFile("", "*", initial)
+	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(f)
@@ -308,7 +313,7 @@ func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
 	replace := "f"
 	want := "alfaalfa"
 
-	f := newTestFile("", "*", initial)
+	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(f)
@@ -321,7 +326,7 @@ func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
 	replace := "f"
 	want := "alfa\nalfa"
 
-	f := newTestFile("", "*", initial)
+	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(f)
@@ -334,7 +339,7 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	replace := "xyz"
 	want := "alpha"
 
-	f := newTestFile("", "*", initial)
+	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
 	fr := findReplace{find: find, replace: replace}
 	fr.ReplaceContents(f)
@@ -342,7 +347,8 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 }
 
 func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
-	d := newTestDir("", "*")
+	b.Helper()
+	d := newTestDir(b, "", "*")
 	defer os.Remove(d.Path)
 
 	cmd := exec.Command("git", "clone", "--depth=1", "--single-branch", repoUrl, ".")
