@@ -61,6 +61,9 @@ func (fr *findReplace) WalkDir(f *File) {
 	}
 
 	for _, file := range files {
+		if isSkippedTempName(file.Name()) {
+			continue
+		}
 		childFile := NewFile(filepath.Join(f.Path, file.Name()))
 		wg.Add(1)
 		go func() {
@@ -114,11 +117,5 @@ func (fr *findReplace) RenameFile(f *File) {
 // Replaces the contents of the given file, using the find & replace values in
 // context.
 func (fr *findReplace) ReplaceContents(f *File) {
-	// Find & replace the contents of text files. Binary-looking files return
-	// an empty string and will be skipped here.
-	content := f.Read()
-	if strings.Contains(content, fr.find) {
-		newContent := strings.Replace(content, fr.find, fr.replace, -1)
-		f.Write(newContent)
-	}
+	f.StreamFindReplace(fr.find, fr.replace)
 }

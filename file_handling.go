@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -46,7 +47,64 @@ func (f *File) Mode() os.FileMode {
 	return f.Info().Mode()
 }
 
-// Read the file into a string.
+func isSkippedTempName(name string) bool {
+	return strings.HasPrefix(name, ".find-replace.tmp.")
+}
+
+// StreamFindReplace rewrites the file in place when find occurs. Binary or
+// non-text files are skipped. Memory use is bounded by streamBufferSize.
+func (f *File) StreamFindReplace(find, replace string) {
+	if len(find) == 0 {
+		return
+	}
+
+	in, err := os.Open(f.Path)
+	if err != nil {
+		log.Fatalf("Unable to open %v: %v", f.Path, err)
+	}
+	defer in.Close()
+
+	var head [1024]byte
+	n, err := in.Read(head[:])
+	if err != nil && err != io.EOF {
+		log.Fatalf("Unable to read %v: %v", f.Path, err)
+	}
+	if n == 0 || !util.IsText(head[:n]) {
+		return
+	}
+	if _, err := in.Seek(0, io.SeekStart); err != nil {
+		log.Fatalf("Failed to seek back to beginning of %v: %v", f.Path, err)
+	}
+
+	tempName := filepath.Join(f.Dir(), fmt.Sprintf(".find-replace.tmp.%d.%s", os.Getpid(), RandomString(8)))
+	out, err := os.OpenFile(tempName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+	if err != nil {
+		log.Fatalf("Error creating tempfile in %v: %v", f.Dir(), err)
+	}
+
+	changed, err := streamReplace(in, out, []byte(find), []byte(replace))
+	closeErr := out.Close()
+	if err != nil {
+		_ = os.Remove(tempName)
+		log.Fatalf("Failed to rewrite %v: %v", f.Path, err)
+	}
+	if closeErr != nil {
+		_ = os.Remove(tempName)
+		log.Fatalf("Failed to close tempfile for %v: %v", f.Path, closeErr)
+	}
+	if !changed {
+		_ = os.Remove(tempName)
+		return
+	}
+
+	log.Printf("Rewriting %v", f.Path)
+	if err := os.Rename(tempName, f.Path); err != nil {
+		_ = os.Remove(tempName)
+		log.Fatalf("Unable to atomically move temp file %v to %v: %v", tempName, f.Path, err)
+	}
+}
+
+// Read the file into a string (used by tests).
 func (f *File) Read() string {
 	handle, err := os.Open(f.Path)
 	if err != nil {
@@ -54,14 +112,12 @@ func (f *File) Read() string {
 	}
 	defer handle.Close()
 
-	// Check if the file looks like text before reading the entire file.
 	var buf [1024]byte
 	n, err := handle.Read(buf[0:])
 	if err != nil || !util.IsText(buf[0:n]) {
 		return ""
 	}
 
-	// Reset file handle so we can read the entire file.
 	if _, err := handle.Seek(0, io.SeekStart); err != nil {
 		log.Fatalf("Failed to seek back to beginning of %v: %v", f.Path, err)
 	}
@@ -73,10 +129,9 @@ func (f *File) Read() string {
 	return builder.String()
 }
 
-// Write content to file atomically, by writing it to a temporary file first,
-// and then moving it to the destination, overwriting the original.
+// Write content to file atomically (used by tests).
 func (f *File) Write(content string) {
-	tempName := filepath.Join(f.Dir(), RandomString(20))
+	tempName := filepath.Join(f.Dir(), fmt.Sprintf(".find-replace.tmp.%d.%s", os.Getpid(), RandomString(8)))
 	if err := os.WriteFile(tempName, []byte(content), f.Mode()); err != nil {
 		log.Fatalf("Error creating tempfile in %v: %v", f.Dir(), err)
 	}
