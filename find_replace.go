@@ -61,7 +61,8 @@ func (fr *findReplace) WalkDir(f *File) {
 	}
 
 	for _, file := range files {
-		childFile := NewFile(filepath.Join(f.Path, file.Name()))
+		entry := file
+		childFile := NewChildFile(f, entry.Name(), entry)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -78,7 +79,7 @@ func (fr *findReplace) WalkDir(f *File) {
 // will need to access it again.
 func (fr *findReplace) HandleFile(f *File) {
 	// If file is a directory, recurse immediately (depth-first).
-	if f.Info().IsDir() {
+	if f.IsDir() {
 		// Ignore certain directories
 		if f.Base() == ".git" {
 			return

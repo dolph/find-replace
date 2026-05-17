@@ -13,6 +13,7 @@ import (
 type File struct {
 	Path string
 	info os.FileInfo
+	isDir *bool
 }
 
 func NewFile(path string) *File {
@@ -23,12 +24,29 @@ func NewFile(path string) *File {
 	return &File{Path: absPath}
 }
 
+// NewChildFile joins name under an already-absolute parent without calling filepath.Abs again.
+func NewChildFile(parent *File, name string, entry os.DirEntry) *File {
+	child := &File{Path: filepath.Join(parent.Path, name)}
+	if entry != nil {
+		isDir := entry.IsDir()
+		child.isDir = &isDir
+	}
+	return child
+}
+
 func (f *File) Base() string {
 	return filepath.Base(f.Path)
 }
 
 func (f *File) Dir() string {
 	return filepath.Dir(f.Path)
+}
+
+func (f *File) IsDir() bool {
+	if f.isDir != nil {
+		return *f.isDir
+	}
+	return f.Info().IsDir()
 }
 
 func (f *File) Info() os.FileInfo {
