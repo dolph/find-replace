@@ -341,6 +341,36 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
 }
 
+
+func TestValidateFindReplace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		find    string
+		replace string
+		wantErr bool
+	}{
+		{name: "empty find", find: "", replace: "x", wantErr: true},
+		{name: "identical", find: "a", replace: "a", wantErr: true},
+		{name: "ok", find: "a", replace: "b", wantErr: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateFindReplace(tc.find, tc.replace)
+			if tc.wantErr && err == nil {
+				t.Fatal("expected error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
 	d := newTestDir("", "*")
 	defer os.Remove(d.Path)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -37,6 +38,9 @@ func main() {
 
 	find := os.Args[1]
 	replace := os.Args[2]
+	if err := validateFindReplace(find, replace); err != nil {
+		log.Fatal(err)
+	}
 
 	fr := findReplace{find: find, replace: replace}
 
@@ -47,6 +51,16 @@ func main() {
 	// haven't explored yet).
 
 	fr.WalkDir(NewFile("."))
+}
+
+func validateFindReplace(find, replace string) error {
+	if find == "" {
+		return fmt.Errorf("FIND must not be empty")
+	}
+	if find == replace {
+		return fmt.Errorf("FIND and REPLACE must be different")
+	}
+	return nil
 }
 
 // Walks files in the directory given by dirName, which is a relative path to a
