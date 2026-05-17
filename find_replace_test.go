@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"errors"
 	"log"
 	"os"
@@ -362,5 +363,36 @@ func BenchmarkNova(b *testing.B) {
 		fr := findReplace{find: RandomString(2), replace: RandomString(2)}
 		b.StartTimer()
 		fr.WalkDir(d)
+	}
+}
+
+func TestReplaceContentsSkipsSetuidFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("special mode bits not applicable")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "setuid.txt")
+	if err := os.WriteFile(path, []byte("needle"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o4755); err != nil {
+		t.Fatal(err)
+	}
+
+	f := NewFile(path)
+	if !hasSpecialFileModeBits(f.Mode()) {
+		t.Skip("setuid bit not supported in this environment")
+	}
+
+	fr := findReplace{find: "needle", replace: "hay"}
+	fr.ReplaceContents(f)
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "needle" {
+		t.Fatalf("content = %q; want unchanged %q", got, "needle")
 	}
 }
