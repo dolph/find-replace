@@ -3,6 +3,13 @@
 Contributor guide for humans and AI agents working on `find-replace`. This is
 the single source of truth — `CLAUDE.md` imports it.
 
+**Don't make assertions in this file about the current or future state of the
+repo** — "currently does X", "once issue #N lands", "this bug exists in
+foo.go:42". They go stale fast and create a docs-rot tax. Keep the content
+here to durable rules, language-level gotchas, and process conventions. If a
+claim only makes sense relative to a specific point in time, it belongs in a
+PR description or a commit message, not here.
+
 ## What this project is
 
 `find-replace` is a small Go CLI (single binary) that recursively
@@ -19,8 +26,9 @@ The CLI surface is intentionally minimal:
 find-replace FIND REPLACE
 ```
 
-No subcommands, no flags (yet — see #26). Adding flags is allowed but
-requires updating the README and bumping `release:minor` or higher.
+Adding a flag or subcommand requires updating the README in the same PR and
+applying at least `release:minor`. Backwards-incompatible changes to that
+surface require `release:major`.
 
 ## Development loop
 
@@ -31,14 +39,12 @@ gofmt -l .                       # must print nothing
 go vet ./...                     # zero output
 go build ./...                   # zero output
 go test -race ./...              # zero output beyond PASS
-
-# The full build script also stamps version metadata (Linux only today; see #32):
-./build.sh
+./build.sh                       # stamps version metadata into the binary
 ```
 
-`go test -race` is non-negotiable. The walker is concurrent (and will get
-*more* concurrent once #7 lands); silent data races are this project's most
-likely class of regression.
+`go test -race` is non-negotiable. Anywhere the codebase fans out work
+across goroutines, silent data races are the most likely class of
+regression.
 
 ## Test-driven development
 
@@ -59,15 +65,15 @@ Default workflow for any behavior change:
   `t.Run(tc.name, …)` so failures are addressable individually.
 - **Hermetic by default.** Use `t.TempDir()` instead of `os.TempDir()` —
   `t.TempDir` is auto-cleaned and unique per test. Do **not** touch the
-  real working directory, the user's `$HOME`, or the real network. The
-  network-bound `BenchmarkNova` (#16) is the cautionary tale.
+  real working directory, the user's `$HOME`, or the real network from a
+  test or benchmark.
 - **`t.Helper()` is mandatory** at the top of every helper function that
   takes a `*testing.T`. Without it, failure lines point inside the helper
   instead of the call site.
 - **Use `t.Fatalf`, never `log.Fatalf`, in test code.** `log.Fatalf` calls
   `os.Exit(1)`, which kills the test binary, leaks any temp files (deferred
   cleanup doesn't run on `os.Exit`), and prevents subsequent tests from
-  running. This bug currently exists in several helpers — see #33.
+  running.
 - **Descriptive test names.** `TestRenameFile_RefusesOverwriteOfExisting`
   reads better than `TestRenameFile2`.
 - **Beware of checklist theater.** Tests that look like:
@@ -91,23 +97,20 @@ Default workflow for any behavior change:
 - **Modern stdlib.** Prefer:
   - `os.ReadFile` / `os.WriteFile` over hand-rolled `os.Open`+`io.Copy`.
   - `strings.ReplaceAll(s, old, new)` over `strings.Replace(s, old, new, -1)`.
-  - `net.JoinHostPort` for `host:port` strings (not relevant here, listed
-    for completeness).
+  - `net.JoinHostPort` for `host:port` strings.
   - `errors.Is` / `errors.As` instead of `==` / type-assertion on errors.
 - **HTTP / file resources** must always have `defer resp.Body.Close()` /
   `defer f.Close()` immediately after the open call, never later.
-- **`context.Context` plumbing** is not required today (the tool is a
-  short-lived single-traversal process), but if you add a long-running
-  goroutine or external call, take a `ctx context.Context` as the first
-  parameter.
-- **`log/slog`** for any *new* structured logging. The current code uses
-  `log.Printf` with `log.SetFlags(0)` to emit human-readable status. Don't
-  mix the two within a single emit; keep the existing user-facing output
-  exactly as documented in the README until the README is updated.
+- **`context.Context` plumbing.** If a function does long-running work or
+  makes external calls, take a `ctx context.Context` as its first parameter.
+  Short single-shot operations don't need one.
+- **`log/slog`** for any new structured logging. Don't mix `log/slog` and
+  `log.Printf` within a single emit site; for user-facing status output
+  documented in the README, follow the existing style.
 - **No `math/rand` for anything that ends up in a filesystem path.** Use
-  `os.CreateTemp` or `crypto/rand` — see #3.
+  `os.CreateTemp` or `crypto/rand`.
 - **No `log.Fatal` from goroutines.** Bubble errors up. The only allowed
-  `log.Fatal` site is `main`, after the walker has fully drained — see #6.
+  `log.Fatal` site is `main`, after the walker has fully drained.
 
 ## Repo conventions
 
@@ -137,8 +140,9 @@ docs/test PRs.** Always apply one of:
 - **`release:minor`** — Additive change: new flag, new subcommand, new
   optional config key, new emitted metric. No existing surface changes.
 - **`release:major`** — Breaking change to the CLI surface, config
-  schema, exit codes, or emitted log/metric names. Example: rejecting
-  empty `FIND` (#10) is technically a breaking change.
+  schema, exit codes, or emitted log/metric names. Tightening input
+  validation that rejects a previously-accepted invocation is also a
+  breaking change.
 
 Precedence when multiple labels are set: `skip > major > minor > patch`.
 `release:skip` always wins, so a PR can be parked mid-flight.
@@ -147,54 +151,46 @@ Precedence when multiple labels are set: `skip > major > minor > patch`.
 
 ## Priority labels (mandatory on every issue)
 
-Apply exactly one of these to every issue. (Note: existing repo convention
-uses a space after the colon, `priority: critical`.)
+Apply exactly one of these to every issue. (Note: repo convention uses a
+space after the colon, `priority: critical`.)
 
 - **`priority: critical`** — Drop everything. Production-impacting bug:
   data loss, security vulnerability shipped in a release, the tool's
-  stated purpose is broken. Examples: #2 (symlink traversal),
-  #3 (predictable temp-file names).
+  stated purpose is broken.
 - **`priority: high`** — Significant correctness, security, or
-  reliability concern. Fix in the next release cycle. Examples:
-  #4 (TOCTOU), #6 (`log.Fatal` from goroutines), #27 (stale CI actions).
+  reliability concern. Fix in the next release cycle.
 - **`priority: medium`** — Important quality-of-life or prevention work.
-  Examples: #11 (exit code), #13 (redundant `Stat`), #30 (CI lacks
-  `staticcheck`/`govulncheck`).
-- **`priority: low`** — Nice to have, backlog. Examples: #14 (double
-  scan), #21 (stale temp files), #29 (Dependabot/SECURITY.md).
+- **`priority: low`** — Nice to have, backlog.
 
 Type labels (`bug`, `security`, `reliability`, `performance`,
 `enhancement`) are orthogonal — preserve them.
 
-## Known traps
+## Language and stdlib gotchas
 
-High-impact landmines a contributor is likely to hit. Cross-reference the
-relevant issue for full repro/fix.
+Durable traps that bite anyone writing filesystem-walking Go code. None of
+these are specific to this codebase — they're properties of the language
+and stdlib.
 
-- **Concurrent walker shares no state safely.** Every `*File` is owned by
-  exactly one goroutine today. The lazy `File.Info()` cache (`file_handling.go:34`)
-  is *not* safe to share. Don't pass a `*File` between goroutines without
-  taking ownership. See #12.
-- **`os.Stat` follows symlinks.** Anywhere the walker decides "is this a
+- **`os.Stat` follows symlinks.** Anywhere code decides "is this a
   directory" via `os.Stat`, the answer is a lie for symlinks. Use
-  `os.Lstat` or the `fs.DirEntry` from `os.ReadDir`. See #2 — critical
-  security bug.
+  `os.Lstat` or the `fs.DirEntry` returned by `os.ReadDir`.
 - **`os.Rename` silently overwrites.** Linux/POSIX `rename(2)` clobbers
-  the destination by default. The `os.Stat`-then-`os.Rename` pattern in
-  `RenameFile` is a TOCTOU and is not safe. Use `os.Link`+`os.Remove`,
-  or `unix.Renameat2(RENAME_NOREPLACE)`. See #4.
-- **`os.WriteFile` uses `O_CREATE`, not `O_CREATE|O_EXCL`.** If the temp
-  path already exists (attacker-pre-created symlink), the write follows
-  the symlink. See #3.
-- **`log.Fatal` from a goroutine does not run deferreds.** Worker
-  goroutines that `log.Fatal` leak temp files. Tests that `log.Fatal`
-  leak temp dirs. See #6, #33.
-- **`golang.org/x/tools/godoc/util.IsText`** samples only the first 1024
-  bytes. Files with a text prefix and binary tail will be silently
-  rewritten. See #9.
-- **Build-time `-ldflags -X` against undefined variables.** `go build`
-  accepts ldflags that target package-level variables that don't exist;
-  the metadata is dropped on the floor. See #26.
+  the destination by default. A `Stat`-then-`Rename` "does the
+  destination exist?" guard is a TOCTOU race; the answer can change
+  between the two calls. Use `os.Link`+`os.Remove`, or
+  `unix.Renameat2(RENAME_NOREPLACE)`.
+- **`os.WriteFile` uses `O_CREATE`, not `O_CREATE|O_EXCL`.** If the
+  target path already exists (e.g., as an attacker-pre-created symlink),
+  the write follows it. Use `os.OpenFile` with `O_CREATE|O_EXCL` for any
+  temp file written into a shared directory.
+- **`log.Fatal` from a goroutine does not run deferreds.** It calls
+  `os.Exit(1)`, which kills the process without flushing deferred temp
+  file cleanup. Worker goroutines that hit a fatal error must return it,
+  not log-and-exit.
+- **Build-time `-ldflags -X` against undefined variables is silent.**
+  `go build` accepts `-ldflags="-X 'main.Foo=bar'"` even when no
+  package-level `Foo` exists; the metadata is dropped. Always declare
+  the target variable in source before adding a `-X` injection.
 
 ## Scope discipline
 
