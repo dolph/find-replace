@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"flag"
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -10,6 +12,8 @@ import (
 	"sync"
 	"time"
 )
+
+const tempFilePrefix = ".find-replace-"
 
 // findReplace is a struct used to provide context to all find & replace
 // operations, including the strings to search for & replace.
@@ -31,12 +35,23 @@ func main() {
 	log.SetFlags(0)
 	rand.Seed(time.Now().UnixNano())
 
-	if len(os.Args) != 3 {
-		log.Fatal("Usage: find-replace FIND REPLACE")
+	showVersion := flag.Bool("version", false, "print version and exit")
+	showVersionShort := flag.Bool("v", false, "print version and exit (shorthand)")
+	flag.Parse()
+
+	if *showVersion || *showVersionShort {
+		fmt.Printf("find-replace %s commit=%s go=%s built=%s os=%s arch=%s tainted=%s\n",
+			GitTag, GitCommit, GoVersion, BuildTimestamp, BuildOS, BuildArch, BuildTainted)
+		return
 	}
 
-	find := os.Args[1]
-	replace := os.Args[2]
+	args := flag.Args()
+	if len(args) != 2 {
+		log.Fatal("Usage: find-replace [-v|--version] FIND REPLACE")
+	}
+
+	find := args[0]
+	replace := args[1]
 
 	fr := findReplace{find: find, replace: replace}
 
@@ -84,6 +99,9 @@ func (fr *findReplace) HandleFile(f *File) {
 			return
 		}
 		fr.WalkDir(f)
+	} else if strings.HasPrefix(f.Base(), tempFilePrefix) {
+		// Skip orphan temp files left by interrupted rewrites
+		return
 	} else {
 		// Replace the contents of regular files
 		fr.ReplaceContents(f)
