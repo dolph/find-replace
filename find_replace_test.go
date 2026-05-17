@@ -244,7 +244,10 @@ func TestHandleFileWithFile(t *testing.T) {
 	fr.HandleFile(f)
 	assertPathExistsAfterRename(t, f, expectedPath)
 
-	got := NewFile(expectedPath).Read()
+	got, ok := NewFile(expectedPath).Read()
+	if !ok {
+		t.Fatal("failed to read file")
+	}
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
 	}
@@ -270,7 +273,10 @@ func TestRenameFile(t *testing.T) {
 // assertNewContentsOfFile ensures that the contents of the file at the given
 // path exactly match the desired string.
 func assertNewContentsOfFile(t *testing.T, path string, initial string, find string, replace string, want string) {
-	got := NewFile(path).Read()
+	got, ok := NewFile(path).Read()
+	if !ok {
+		t.Fatalf("failed to read %v", path)
+	}
 	if got != want {
 		t.Errorf("replace %v with %v in %v, but got %v; want %v", find, replace, initial, got, want)
 	}

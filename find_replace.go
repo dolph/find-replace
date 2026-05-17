@@ -8,14 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // findReplace is a struct used to provide context to all find & replace
 // operations, including the strings to search for & replace.
 type findReplace struct {
-	find    string
-	replace string
+	find      string
+	replace   string
+	hadErrors atomic.Bool
 }
 
 // main processes command line arguments, builds the context struct, and begins
@@ -46,7 +48,16 @@ func main() {
 	// alphabetically, breadth-first (and you'd be renaming files that you
 	// haven't explored yet).
 
-	fr.WalkDir(NewFile("."))
+	fr.WalkDir(fr.newFile("."))
+	if fr.hadErrors.Load() {
+		os.Exit(1)
+	}
+}
+
+func (fr *findReplace) newFile(path string) *File {
+	f := NewFile(path)
+	f.onError = fr.noteError
+	return f
 }
 
 // Walks files in the directory given by dirName, which is a relative path to a
@@ -57,16 +68,17 @@ func (fr *findReplace) WalkDir(f *File) {
 	// List the files in this directory.
 	files, err := os.ReadDir(f.Path)
 	if err != nil {
-		log.Fatalf("Unable to read directory: %v", err)
+		fr.noteError("Unable to read directory: %v", err)
+		return
 	}
 
-	for _, file := range files {
-		childFile := NewFile(filepath.Join(f.Path, file.Name()))
+	for _, entry := range files {
+		childFile := fr.newFile(filepath.Join(f.Path, entry.Name()))
 		wg.Add(1)
-		go func() {
+		go func(child *File) {
 			defer wg.Done()
-			fr.HandleFile(childFile)
-		}()
+			fr.HandleFile(child)
+		}(childFile)
 	}
 
 	wg.Wait() // for (potentially recursive) calls to return
@@ -77,8 +89,13 @@ func (fr *findReplace) WalkDir(f *File) {
 // complete, the file is renamed (if necessary) since no subsequent operations
 // will need to access it again.
 func (fr *findReplace) HandleFile(f *File) {
+	info := f.Info()
+	if info == nil {
+		return
+	}
+
 	// If file is a directory, recurse immediately (depth-first).
-	if f.Info().IsDir() {
+	if info.IsDir() {
 		// Ignore certain directories
 		if f.Base() == ".git" {
 			return
@@ -103,10 +120,10 @@ func (fr *findReplace) RenameFile(f *File) {
 		if _, err := os.Stat(newPath); errors.Is(err, os.ErrNotExist) {
 			log.Printf("Renaming %v to %v", f.Path, newBaseName)
 			if err := os.Rename(f.Path, newPath); err != nil {
-				log.Fatalf("Unable to rename %v to %v: %v", f.Path, newBaseName, err)
+				fr.noteError("Unable to rename %v to %v: %v", f.Path, newBaseName, err)
 			}
 		} else {
-			log.Fatalf("Refusing to rename %v to %v: %v already exists", f.Path, newBaseName, newPath)
+			fr.noteError("Refusing to rename %v to %v: %v already exists", f.Path, newBaseName, newPath)
 		}
 	}
 }
@@ -116,7 +133,10 @@ func (fr *findReplace) RenameFile(f *File) {
 func (fr *findReplace) ReplaceContents(f *File) {
 	// Find & replace the contents of text files. Binary-looking files return
 	// an empty string and will be skipped here.
-	content := f.Read()
+	content, ok := f.Read()
+	if !ok {
+		return
+	}
 	if strings.Contains(content, fr.find) {
 		newContent := strings.Replace(content, fr.find, fr.replace, -1)
 		f.Write(newContent)
