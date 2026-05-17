@@ -1,13 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/tools/godoc/util"
 )
 
 type File struct {
@@ -46,7 +45,7 @@ func (f *File) Mode() os.FileMode {
 	return f.Info().Mode()
 }
 
-// Read the file into a string.
+// Read the file into a string. Files containing a NUL byte are treated as binary and skipped.
 func (f *File) Read() string {
 	handle, err := os.Open(f.Path)
 	if err != nil {
@@ -54,21 +53,40 @@ func (f *File) Read() string {
 	}
 	defer handle.Close()
 
-	// Check if the file looks like text before reading the entire file.
 	var buf [1024]byte
-	n, err := handle.Read(buf[0:])
-	if err != nil || !util.IsText(buf[0:n]) {
+	n, err := handle.Read(buf[:])
+	if err != nil && err != io.EOF {
+		log.Fatalf("Unable to read %v: %v", f.Path, err)
+	}
+	if n == 0 {
+		return ""
+	}
+	if !isTextBytes(buf[:n]) {
 		return ""
 	}
 
-	// Reset file handle so we can read the entire file.
 	if _, err := handle.Seek(0, io.SeekStart); err != nil {
 		log.Fatalf("Failed to seek back to beginning of %v: %v", f.Path, err)
 	}
 
 	builder := new(strings.Builder)
-	if _, err := io.Copy(builder, handle); err != nil {
-		log.Fatalf("Failed to read %v to a string: %v", f.Path, err)
+	chunk := make([]byte, 32*1024)
+	for {
+		n, readErr := handle.Read(chunk)
+		if n > 0 {
+			if bytes.IndexByte(chunk[:n], 0) >= 0 {
+				return ""
+			}
+			if _, wErr := builder.Write(chunk[:n]); wErr != nil {
+				log.Fatalf("Failed to read %v to a string: %v", f.Path, wErr)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			log.Fatalf("Failed to read %v to a string: %v", f.Path, readErr)
+		}
 	}
 	return builder.String()
 }
