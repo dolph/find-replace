@@ -12,6 +12,20 @@ Rewriting ./hello-world
 Renaming ./alphabet to betabet
 ```
 
+### Scope flags
+
+By default, both file contents and paths are updated. Use mutually exclusive flags to limit the operation:
+
+```bash
+# Rewrite contents only; leave file and directory names unchanged
+$ find-replace --content-only alpha beta
+
+# Rename files and directories only; leave file contents unchanged
+$ find-replace --rename-only alpha beta
+```
+
+Passing both flags is an error.
+
 * Files with matching contents in the current working directory are atomically rewritten.
 * Files and directories are renamed.
 * Searches are performed recursively from the current working directory.
