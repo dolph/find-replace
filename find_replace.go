@@ -2,13 +2,20 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
+)
+
+type operationScope int
+
+const (
+	scopeAll operationScope = iota
+	scopeContentOnly
+	scopeRenameOnly
 )
 
 // findReplace is a struct used to provide context to all find & replace
@@ -16,6 +23,9 @@ import (
 type findReplace struct {
 	find    string
 	replace string
+	scope   operationScope
+	renames []renamePlan
+	renameMu sync.Mutex
 }
 
 // main processes command line arguments, builds the context struct, and begins
@@ -26,19 +36,43 @@ type findReplace struct {
 // • dirName: the name of a directory, without a trailing separator
 // • baseName: the relative name of a file, without a directory
 // • path: the relative path to a specific file or directory, including both dirName and baseName
+func parseArgs(args []string) (findReplace, error) {
+	scope := scopeAll
+	i := 0
+	for i < len(args) && strings.HasPrefix(args[i], "-") {
+		switch args[i] {
+		case "--content-only":
+			if scope != scopeAll {
+				return findReplace{}, fmt.Errorf("cannot pass both --content-only and --rename-only")
+			}
+			scope = scopeContentOnly
+		case "--rename-only":
+			if scope != scopeAll {
+				return findReplace{}, fmt.Errorf("cannot pass both --content-only and --rename-only")
+			}
+			scope = scopeRenameOnly
+		default:
+			return findReplace{}, fmt.Errorf("unknown flag: %s", args[i])
+		}
+		i++
+	}
+
+	rest := args[i:]
+	if len(rest) != 2 {
+		return findReplace{}, fmt.Errorf("usage: find-replace [--content-only | --rename-only] FIND REPLACE")
+	}
+
+	return findReplace{find: rest[0], replace: rest[1], scope: scope}, nil
+}
+
 func main() {
 	// Remove date/time from logging output
 	log.SetFlags(0)
-	rand.Seed(time.Now().UnixNano())
 
-	if len(os.Args) != 3 {
-		log.Fatal("Usage: find-replace FIND REPLACE")
+	fr, err := parseArgs(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
 	}
-
-	find := os.Args[1]
-	replace := os.Args[2]
-
-	fr := findReplace{find: find, replace: replace}
 
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
@@ -46,7 +80,17 @@ func main() {
 	// alphabetically, breadth-first (and you'd be renaming files that you
 	// haven't explored yet).
 
-	fr.WalkDir(NewFile("."))
+	fr.Run(NewFile("."))
+}
+
+// Run walks from root and applies deferred renames when scope allows.
+func (fr *findReplace) Run(root *File) {
+	fr.WalkDir(root)
+	if fr.scope != scopeContentOnly {
+		if err := fr.applyRenames(); err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // Walks files in the directory given by dirName, which is a relative path to a
@@ -84,19 +128,23 @@ func (fr *findReplace) HandleFile(f *File) {
 			return
 		}
 		fr.WalkDir(f)
-	} else {
+	} else if fr.scope != scopeRenameOnly {
 		// Replace the contents of regular files
 		fr.ReplaceContents(f)
 	}
 
-	// Rename the file now that we're otherwise done with it
-	fr.RenameFile(f)
+	if fr.scope != scopeContentOnly {
+		newBaseName := strings.ReplaceAll(f.Base(), fr.find, fr.replace)
+		if f.Base() != newBaseName {
+			fr.queueRename(f.Path, filepath.Join(f.Dir(), newBaseName))
+		}
+	}
 }
 
 // RenameFile renames a file if the destination file name does not already
 // exist.
 func (fr *findReplace) RenameFile(f *File) {
-	newBaseName := strings.Replace(f.Base(), fr.find, fr.replace, -1)
+	newBaseName := strings.ReplaceAll(f.Base(), fr.find, fr.replace)
 	newPath := filepath.Join(f.Dir(), newBaseName)
 
 	if f.Base() != newBaseName {
@@ -118,7 +166,7 @@ func (fr *findReplace) ReplaceContents(f *File) {
 	// an empty string and will be skipped here.
 	content := f.Read()
 	if strings.Contains(content, fr.find) {
-		newContent := strings.Replace(content, fr.find, fr.replace, -1)
+		newContent := strings.ReplaceAll(content, fr.find, fr.replace)
 		f.Write(newContent)
 	}
 }
