@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"log"
 	"math/rand"
@@ -13,9 +14,21 @@ import (
 
 // findReplace is a struct used to provide context to all find & replace
 // operations, including the strings to search for & replace.
+
+func newFindReplace(find, replace string) findReplace {
+	return findReplace{
+		find:     find,
+		replace:  replace,
+		findB:    []byte(find),
+		replaceB: []byte(replace),
+	}
+}
+
 type findReplace struct {
 	find    string
 	replace string
+	findB    []byte
+	replaceB []byte
 }
 
 // main processes command line arguments, builds the context struct, and begins
@@ -38,7 +51,7 @@ func main() {
 	find := os.Args[1]
 	replace := os.Args[2]
 
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
@@ -117,8 +130,11 @@ func (fr *findReplace) ReplaceContents(f *File) {
 	// Find & replace the contents of text files. Binary-looking files return
 	// an empty string and will be skipped here.
 	content := f.Read()
-	if strings.Contains(content, fr.find) {
-		newContent := strings.Replace(content, fr.find, fr.replace, -1)
-		f.Write(newContent)
+	if content == "" {
+		return
+	}
+	if bytes.Contains([]byte(content), fr.findB) {
+		newContent := bytes.Replace([]byte(content), fr.findB, fr.replaceB, -1)
+		f.Write(string(newContent))
 	}
 }
