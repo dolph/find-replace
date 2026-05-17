@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,6 +17,7 @@ import (
 type findReplace struct {
 	find    string
 	replace string
+	hadErrors atomic.Bool
 }
 
 // main processes command line arguments, builds the context struct, and begins
@@ -47,6 +49,15 @@ func main() {
 	// haven't explored yet).
 
 	fr.WalkDir(NewFile("."))
+	if fr.hadErrors.Load() {
+		os.Exit(1)
+	}
+}
+
+
+func (fr *findReplace) noteError(format string, args ...interface{}) {
+	log.Printf(format, args...)
+	fr.hadErrors.Store(true)
 }
 
 // Walks files in the directory given by dirName, which is a relative path to a
@@ -57,7 +68,8 @@ func (fr *findReplace) WalkDir(f *File) {
 	// List the files in this directory.
 	files, err := os.ReadDir(f.Path)
 	if err != nil {
-		log.Fatalf("Unable to read directory: %v", err)
+		fr.noteError("Unable to read directory: %v", err)
+		return
 	}
 
 	for _, file := range files {
@@ -77,12 +89,12 @@ func (fr *findReplace) WalkDir(f *File) {
 // complete, the file is renamed (if necessary) since no subsequent operations
 // will need to access it again.
 func (fr *findReplace) HandleFile(f *File) {
+	if f.Base() == ".git" {
+		return
+	}
+
 	// If file is a directory, recurse immediately (depth-first).
 	if f.Info().IsDir() {
-		// Ignore certain directories
-		if f.Base() == ".git" {
-			return
-		}
 		fr.WalkDir(f)
 	} else {
 		// Replace the contents of regular files
@@ -117,8 +129,8 @@ func (fr *findReplace) ReplaceContents(f *File) {
 	// Find & replace the contents of text files. Binary-looking files return
 	// an empty string and will be skipped here.
 	content := f.Read()
-	if strings.Contains(content, fr.find) {
-		newContent := strings.Replace(content, fr.find, fr.replace, -1)
+	newContent := strings.Replace(content, fr.find, fr.replace, -1)
+	if newContent != content {
 		f.Write(newContent)
 	}
 }

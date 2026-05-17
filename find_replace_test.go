@@ -341,6 +341,29 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
 }
 
+
+func TestHandleFileSkipsGitFile(t *testing.T) {
+	root := newTestDir("", "*")
+	defer os.Remove(root.Path)
+
+	gitFile := filepath.Join(root.Path, ".git")
+	if err := os.WriteFile(gitFile, []byte("gitdir: ../.git/worktrees/example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fr := findReplace{find: "git", replace: "got"}
+	fr.HandleFile(NewFile(gitFile))
+
+	got, err := os.ReadFile(gitFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "gitdir: ../.git/worktrees/example\n"
+	if string(got) != want {
+		t.Fatalf("git file rewritten: got %q, want %q", got, want)
+	}
+}
+
 func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
 	d := newTestDir("", "*")
 	defer os.Remove(d.Path)
