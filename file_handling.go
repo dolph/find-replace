@@ -80,6 +80,10 @@ func (f *File) Write(content string) {
 	if err := os.WriteFile(tempName, []byte(content), f.Mode()); err != nil {
 		log.Fatalf("Error creating tempfile in %v: %v", f.Dir(), err)
 	}
+	if err := chownTempFromInfo(tempName, f.Info()); err != nil {
+		_ = os.Remove(tempName)
+		log.Fatalf("Failed to preserve ownership of temp file %v: %v", tempName, err)
+	}
 
 	log.Printf("Rewriting %v", f.Path)
 	if err := os.Rename(tempName, f.Path); err != nil {
