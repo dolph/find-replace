@@ -16,6 +16,7 @@ import (
 type findReplace struct {
 	find    string
 	replace string
+	workers chan struct{}
 }
 
 // main processes command line arguments, builds the context struct, and begins
@@ -38,7 +39,11 @@ func main() {
 	find := os.Args[1]
 	replace := os.Args[2]
 
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{
+		find:    find,
+		replace: replace,
+		workers: make(chan struct{}, workerLimit()),
+	}
 
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
@@ -49,48 +54,63 @@ func main() {
 	fr.WalkDir(NewFile("."))
 }
 
+func (fr *findReplace) acquireWorker() {
+	fr.workers <- struct{}{}
+}
+
+func (fr *findReplace) releaseWorker() {
+	<-fr.workers
+}
+
+func (fr *findReplace) processFile(f *File) {
+	fr.acquireWorker()
+	defer fr.releaseWorker()
+	fr.ReplaceContents(f)
+	fr.RenameFile(f)
+}
+
 // Walks files in the directory given by dirName, which is a relative path to a
 // directory. Calls HandleFile for each file it finds, if it's not ignored.
 func (fr *findReplace) WalkDir(f *File) {
-	var wg sync.WaitGroup
-
-	// List the files in this directory.
 	files, err := os.ReadDir(f.Path)
 	if err != nil {
 		log.Fatalf("Unable to read directory: %v", err)
 	}
 
-	for _, file := range files {
-		childFile := NewFile(filepath.Join(f.Path, file.Name()))
+	var wg sync.WaitGroup
+	for _, entry := range files {
+		childFile := NewFile(filepath.Join(f.Path, entry.Name()))
+		if entry.IsDir() {
+			if childFile.Base() == ".git" {
+				continue
+			}
+			fr.WalkDir(childFile)
+			fr.RenameFile(childFile)
+			continue
+		}
+
 		wg.Add(1)
-		go func() {
+		go func(file *File) {
 			defer wg.Done()
-			fr.HandleFile(childFile)
-		}()
+			fr.processFile(file)
+		}(childFile)
 	}
 
-	wg.Wait() // for (potentially recursive) calls to return
+	wg.Wait()
 }
 
-// HandleFile immediately recurses depth-first into directories it finds,
-// otherwise calls ReplaceContents for regular files. When either operation is
-// complete, the file is renamed (if necessary) since no subsequent operations
-// will need to access it again.
+// HandleFile supports unit tests and mirrors the walk order: directories
+// synchronously, files through the bounded worker pool.
 func (fr *findReplace) HandleFile(f *File) {
-	// If file is a directory, recurse immediately (depth-first).
 	if f.Info().IsDir() {
-		// Ignore certain directories
 		if f.Base() == ".git" {
 			return
 		}
 		fr.WalkDir(f)
-	} else {
-		// Replace the contents of regular files
-		fr.ReplaceContents(f)
+		fr.RenameFile(f)
+		return
 	}
-
-	// Rename the file now that we're otherwise done with it
-	fr.RenameFile(f)
+	fr.processFile(f)
 }
 
 // RenameFile renames a file if the destination file name does not already

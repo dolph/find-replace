@@ -141,7 +141,7 @@ func TestWalkDir(t *testing.T) {
 	f1 := newTestFile(d.Path, "why", f1Contents)
 	defer os.Remove(f1.Path)
 
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 	fr.WalkDir(d)
 
 	// d1: who/ > fo/
@@ -197,7 +197,7 @@ func TestHandleFileWithDir(t *testing.T) {
 	defer os.Remove(f.Path)
 	expectedPath := filepath.Join(f.Dir(), strings.Replace(f.Base(), find, replace, -1))
 	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 
 	assertFileExists(t, f)
 	fr.HandleFile(f)
@@ -220,7 +220,7 @@ func TestHandleFileWithIgnoredDir(t *testing.T) {
 	unexpectedName := strings.Replace(f.Base(), find, replace, -1)
 	unexpectedPath := filepath.Join(f.Dir(), unexpectedName)
 	defer os.Remove(unexpectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 
 	assertFileExists(t, f)
 	fr.HandleFile(f)
@@ -238,7 +238,7 @@ func TestHandleFileWithFile(t *testing.T) {
 	expectedName := strings.Replace(f.Base(), find, replace, -1)
 	expectedPath := filepath.Join(f.Dir(), expectedName)
 	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 
 	assertFileExists(t, f)
 	fr.HandleFile(f)
@@ -260,7 +260,7 @@ func TestRenameFile(t *testing.T) {
 	expectedName := strings.Replace(f.Base(), find, replace, -1)
 	expectedPath := filepath.Join(f.Dir(), expectedName)
 	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 
 	assertFileExists(t, f)
 	fr.RenameFile(f)
@@ -284,7 +284,7 @@ func TestReplaceContents(t *testing.T) {
 
 	f := newTestFile("", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 	fr.ReplaceContents(f)
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
 }
@@ -297,7 +297,7 @@ func TestReplaceContentsEntireFile(t *testing.T) {
 
 	f := newTestFile("", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 	fr.ReplaceContents(f)
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
 }
@@ -310,7 +310,7 @@ func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
 
 	f := newTestFile("", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 	fr.ReplaceContents(f)
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
 }
@@ -323,7 +323,7 @@ func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
 
 	f := newTestFile("", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 	fr.ReplaceContents(f)
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
 }
@@ -336,7 +336,7 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 
 	f := newTestFile("", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := findReplace{find: find, replace: replace, workers: make(chan struct{}, workerLimit())}
 	fr.ReplaceContents(f)
 	assertNewContentsOfFile(t, f.Path, initial, find, replace, want)
 }
