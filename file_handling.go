@@ -77,8 +77,12 @@ func (f *File) Read() string {
 // and then moving it to the destination, overwriting the original.
 func (f *File) Write(content string) {
 	tempName := filepath.Join(f.Dir(), RandomString(20))
+	modTime := f.Info().ModTime()
 	if err := os.WriteFile(tempName, []byte(content), f.Mode()); err != nil {
 		log.Fatalf("Error creating tempfile in %v: %v", f.Dir(), err)
+	}
+	if err := os.Chtimes(tempName, modTime, modTime); err != nil {
+		log.Fatalf("Failed to preserve mtime on temp file %v: %v", tempName, err)
 	}
 
 	log.Printf("Rewriting %v", f.Path)
