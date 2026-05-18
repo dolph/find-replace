@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 )
 
 // findReplace is a struct used to provide context to all find & replace
@@ -78,8 +76,6 @@ func main() {
 func run(args []string, stderr io.Writer) int {
 	// Remove date/time from logging output.
 	log.SetFlags(0)
-	// Vestigial seed for the math/rand-based temp file names; see issue #3.
-	rand.Seed(time.Now().UnixNano())
 
 	if len(args) != 3 {
 		fmt.Fprintln(stderr, "Usage: find-replace FIND REPLACE")
