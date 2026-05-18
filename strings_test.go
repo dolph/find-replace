@@ -7,6 +7,7 @@ import (
 // assertRandomStringLength ensures that the generated string matches the
 // desired length.
 func assertRandomStringLength(t *testing.T, ask int, want int) {
+	t.Helper()
 	got := len(RandomString(ask))
 	if got != want {
 		t.Errorf("len(RandomString(%v)) = %v; want %v", ask, got, want)
