@@ -684,3 +684,268 @@ func BenchmarkNova(b *testing.B) {
 		fr.WalkDir(d)
 	}
 }
+
+// TestWalkDir_SymlinkToFileOutsideCWDNotFollowed ensures the walker does not
+// rewrite a file reached via a symlink whose target lives outside the search
+// root. Following the symlink would violate find-replace's documented contract
+// ("Searches are performed recursively from the current working directory")
+// and is a known privilege-escalation primitive (see issue #2).
+func TestWalkDir_SymlinkToFileOutsideCWDNotFollowed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks on Windows typically requires admin privileges")
+	}
+
+	// outside holds the file that must NOT be touched by the walk.
+	outside := t.TempDir()
+	outsideFile := filepath.Join(outside, "outside.txt")
+	const outsideContent = "alpha-outside"
+	if err := os.WriteFile(outsideFile, []byte(outsideContent), 0600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", outsideFile, err)
+	}
+
+	// root is the search root. It contains a real file and a symlink that
+	// escapes to outsideFile.
+	root := t.TempDir()
+	insideFile := filepath.Join(root, "inside.txt")
+	if err := os.WriteFile(insideFile, []byte("alpha-inside"), 0600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", insideFile, err)
+	}
+	escape := filepath.Join(root, "escape.txt")
+	if err := os.Symlink(outsideFile, escape); err != nil {
+		t.Fatalf("Symlink(%q, %q): %v", outsideFile, escape, err)
+	}
+
+	rootFile := newFileOrFatal(t, root)
+	fr := findReplace{find: "alpha", replace: "beta"}
+	fr.WalkDir(rootFile)
+
+	if err := fr.errs.err(); err != nil {
+		t.Errorf("WalkDir reported unexpected error(s): %v", err)
+	}
+
+	// The real file inside the root must have been rewritten.
+	got, err := os.ReadFile(insideFile)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", insideFile, err)
+	}
+	if string(got) != "beta-inside" {
+		t.Errorf("inside.txt = %q; want %q", string(got), "beta-inside")
+	}
+
+	// The symlink target outside the root must NOT have been rewritten.
+	got, err = os.ReadFile(outsideFile)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", outsideFile, err)
+	}
+	if string(got) != outsideContent {
+		t.Errorf("outside.txt = %q; want %q (symlink was followed)", string(got), outsideContent)
+	}
+
+	// The symlink itself should still be present as a symlink (the walker
+	// should have skipped it, not replaced it with a regular file or renamed
+	// it).
+	info, err := os.Lstat(escape)
+	if err != nil {
+		t.Fatalf("Lstat(%q) after walk: %v (symlink was removed/renamed)", escape, err)
+	}
+	if info.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("Lstat(%q).Mode() = %v; want a symlink (was replaced with a regular file)", escape, info.Mode())
+	}
+}
+
+// TestWalkDir_SymlinkToDirOutsideCWDNotTraversed ensures the walker does not
+// recurse through a symlink whose target is a directory outside the search
+// root. This is the directory variant of the issue #2 reproducer.
+func TestWalkDir_SymlinkToDirOutsideCWDNotTraversed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks on Windows typically requires admin privileges")
+	}
+
+	// outside is a directory tree we must not touch.
+	outside := t.TempDir()
+	outsideFile := filepath.Join(outside, "victim.txt")
+	const outsideContent = "alpha-outside"
+	if err := os.WriteFile(outsideFile, []byte(outsideContent), 0600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", outsideFile, err)
+	}
+
+	root := t.TempDir()
+	escape := filepath.Join(root, "escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatalf("Symlink(%q, %q): %v", outside, escape, err)
+	}
+
+	rootFile := newFileOrFatal(t, root)
+	fr := findReplace{find: "alpha", replace: "beta"}
+	fr.WalkDir(rootFile)
+
+	if err := fr.errs.err(); err != nil {
+		t.Errorf("WalkDir reported unexpected error(s): %v", err)
+	}
+
+	// The outside file must NOT have been rewritten.
+	got, err := os.ReadFile(outsideFile)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", outsideFile, err)
+	}
+	if string(got) != outsideContent {
+		t.Errorf("victim.txt = %q; want %q (symlinked directory was traversed)", string(got), outsideContent)
+	}
+
+	// The outside file must NOT have been renamed.
+	renamed := filepath.Join(outside, "beta-victim.txt")
+	if _, err := os.Lstat(renamed); err == nil {
+		t.Errorf("Lstat(%q) succeeded; file inside symlinked dir was renamed", renamed)
+	}
+
+	// The symlink itself should still be present.
+	if _, err := os.Lstat(escape); err != nil {
+		t.Errorf("Lstat(%q) after walk: %v (symlink was removed/renamed)", escape, err)
+	}
+}
+
+// TestWalkDir_SymlinkToFileInsideCWDNotFollowed verifies that even when a
+// symlink's target is inside the search root, the symlink itself is still
+// skipped. The target is still picked up via the normal walker pass over its
+// real path, so it is rewritten exactly once — never via the symlink.
+func TestWalkDir_SymlinkToFileInsideCWDNotFollowed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks on Windows typically requires admin privileges")
+	}
+
+	root := t.TempDir()
+	real := filepath.Join(root, "real.txt")
+	if err := os.WriteFile(real, []byte("alpha"), 0600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", real, err)
+	}
+	link := filepath.Join(root, "link.txt")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatalf("Symlink(%q, %q): %v", real, link, err)
+	}
+
+	rootFile := newFileOrFatal(t, root)
+	fr := findReplace{find: "alpha", replace: "beta"}
+	fr.WalkDir(rootFile)
+
+	if err := fr.errs.err(); err != nil {
+		t.Errorf("WalkDir reported unexpected error(s): %v", err)
+	}
+
+	// The real file should be rewritten via the normal pass — exactly once
+	// (not twice — that is, the symlink was not also followed and rewritten).
+	got, err := os.ReadFile(real)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", real, err)
+	}
+	if string(got) != "beta" {
+		t.Errorf("real.txt = %q; want %q", string(got), "beta")
+	}
+
+	// The symlink should still be a symlink pointing to the (now-rewritten)
+	// real file. The walker must not have renamed or removed it.
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("Lstat(%q) after walk: %v (symlink was removed/renamed)", link, err)
+	}
+	if info.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("Lstat(%q).Mode() = %v; want a symlink (was replaced with a regular file)", link, info.Mode())
+	}
+}
+
+// TestWalkDir_BrokenSymlinkSkippedWithoutError ensures a dangling symlink is
+// silently skipped, not reported as an error and not "rewritten" or "renamed".
+func TestWalkDir_BrokenSymlinkSkippedWithoutError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks on Windows typically requires admin privileges")
+	}
+
+	root := t.TempDir()
+	broken := filepath.Join(root, "alpha-broken")
+	target := filepath.Join(root, "does-not-exist")
+	if err := os.Symlink(target, broken); err != nil {
+		t.Fatalf("Symlink(%q, %q): %v", target, broken, err)
+	}
+
+	rootFile := newFileOrFatal(t, root)
+	fr := findReplace{find: "alpha", replace: "beta"}
+	fr.WalkDir(rootFile)
+
+	if err := fr.errs.err(); err != nil {
+		t.Errorf("WalkDir reported unexpected error(s) for a broken symlink: %v", err)
+	}
+
+	// The symlink must still be present under its original name (it was not
+	// renamed alpha-broken -> beta-broken, nor was it followed).
+	info, err := os.Lstat(broken)
+	if err != nil {
+		t.Fatalf("Lstat(%q) after walk: %v (broken symlink was removed/renamed)", broken, err)
+	}
+	if info.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("Lstat(%q).Mode() = %v; want a symlink (was replaced with a regular file)", broken, info.Mode())
+	}
+
+	// The renamed name should not have been created either.
+	renamed := filepath.Join(root, "beta-broken")
+	if _, err := os.Lstat(renamed); err == nil {
+		t.Errorf("Lstat(%q) succeeded; broken symlink was renamed", renamed)
+	}
+}
+
+// TestWalkDir_RegularFileStillProcessed is a sanity check that the
+// symlink-skipping fix does not break the common case for regular files.
+func TestWalkDir_RegularFileStillProcessed(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "alpha.txt")
+	if err := os.WriteFile(src, []byte("alpha"), 0600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", src, err)
+	}
+
+	rootFile := newFileOrFatal(t, root)
+	fr := findReplace{find: "alpha", replace: "beta"}
+	fr.WalkDir(rootFile)
+
+	if err := fr.errs.err(); err != nil {
+		t.Errorf("WalkDir reported unexpected error(s): %v", err)
+	}
+
+	renamed := filepath.Join(root, "beta.txt")
+	got, err := os.ReadFile(renamed)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", renamed, err)
+	}
+	if string(got) != "beta" {
+		t.Errorf("beta.txt = %q; want %q", string(got), "beta")
+	}
+}
+
+// TestWalkDir_RegularDirStillTraversed is the directory variant of the sanity
+// check.
+func TestWalkDir_RegularDirStillTraversed(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "alpha-dir")
+	if err := os.Mkdir(sub, 0700); err != nil {
+		t.Fatalf("Mkdir(%q): %v", sub, err)
+	}
+	child := filepath.Join(sub, "alpha.txt")
+	if err := os.WriteFile(child, []byte("alpha"), 0600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", child, err)
+	}
+
+	rootFile := newFileOrFatal(t, root)
+	fr := findReplace{find: "alpha", replace: "beta"}
+	fr.WalkDir(rootFile)
+
+	if err := fr.errs.err(); err != nil {
+		t.Errorf("WalkDir reported unexpected error(s): %v", err)
+	}
+
+	renamedDir := filepath.Join(root, "beta-dir")
+	renamedChild := filepath.Join(renamedDir, "beta.txt")
+	got, err := os.ReadFile(renamedChild)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", renamedChild, err)
+	}
+	if string(got) != "beta" {
+		t.Errorf("beta-dir/beta.txt = %q; want %q", string(got), "beta")
+	}
+}
