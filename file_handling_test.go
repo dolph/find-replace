@@ -5,11 +5,7 @@ import (
 	"testing"
 )
 
-// TestNewFile exercises NewFile's path-resolution behavior. It does NOT cover
-// the filepath.Abs error path: NewFile currently calls log.Fatalf on that
-// failure, which would kill the test binary, and that surface is not reachable
-// on most platforms in any case. The error path will become testable when
-// NewFile is refactored to return an error (see issue #6).
+// TestNewFile exercises NewFile's path-resolution behavior.
 func TestNewFile(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -65,7 +61,10 @@ func TestNewFile(t *testing.T) {
 				want = abs
 			}
 
-			got := NewFile(tc.input)
+			got, err := NewFile(tc.input)
+			if err != nil {
+				t.Fatalf("NewFile(%q) returned unexpected error: %v", tc.input, err)
+			}
 			if got == nil {
 				t.Fatalf("NewFile(%q) returned nil", tc.input)
 			}
