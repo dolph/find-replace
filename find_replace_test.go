@@ -74,6 +74,25 @@ func readOrFatal(tb testing.TB, f *File) string {
 	return s
 }
 
+// requireSymlinks skips the calling test if the test process cannot create
+// symbolic links. On Windows this typically requires
+// SeCreateSymbolicLinkPrivilege; on sandboxed Linux filesystems and certain
+// container configurations the syscall can also fail with EPERM/ENOSYS.
+// Probing for the actual capability avoids skipping on a host where symlinks
+// happen to work, and avoids running on a host where they happen not to.
+func requireSymlinks(t *testing.T) {
+	t.Helper()
+	probe := t.TempDir()
+	target := filepath.Join(probe, "target")
+	if err := os.WriteFile(target, nil, 0600); err != nil {
+		t.Fatalf("requireSymlinks setup: WriteFile(%q): %v", target, err)
+	}
+	link := filepath.Join(probe, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks not supported in this environment: %v", err)
+	}
+}
+
 func expectedPathAfterRename(f *File, fr *findReplace) string {
 	return filepath.Join(f.Dir(), strings.ReplaceAll(f.Base(), fr.find, fr.replace))
 }
@@ -691,9 +710,7 @@ func BenchmarkNova(b *testing.B) {
 // ("Searches are performed recursively from the current working directory")
 // and is a known privilege-escalation primitive (see issue #2).
 func TestWalkDir_SymlinkToFileOutsideCWDNotFollowed(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("creating symlinks on Windows typically requires admin privileges")
-	}
+	requireSymlinks(t)
 
 	// outside holds the file that must NOT be touched by the walk.
 	outside := t.TempDir()
@@ -757,9 +774,7 @@ func TestWalkDir_SymlinkToFileOutsideCWDNotFollowed(t *testing.T) {
 // recurse through a symlink whose target is a directory outside the search
 // root. This is the directory variant of the issue #2 reproducer.
 func TestWalkDir_SymlinkToDirOutsideCWDNotTraversed(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("creating symlinks on Windows typically requires admin privileges")
-	}
+	requireSymlinks(t)
 
 	// outside is a directory tree we must not touch.
 	outside := t.TempDir()
@@ -809,9 +824,7 @@ func TestWalkDir_SymlinkToDirOutsideCWDNotTraversed(t *testing.T) {
 // skipped. The target is still picked up via the normal walker pass over its
 // real path, so it is rewritten exactly once — never via the symlink.
 func TestWalkDir_SymlinkToFileInsideCWDNotFollowed(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("creating symlinks on Windows typically requires admin privileges")
-	}
+	requireSymlinks(t)
 
 	root := t.TempDir()
 	real := filepath.Join(root, "real.txt")
@@ -855,9 +868,7 @@ func TestWalkDir_SymlinkToFileInsideCWDNotFollowed(t *testing.T) {
 // TestWalkDir_BrokenSymlinkSkippedWithoutError ensures a dangling symlink is
 // silently skipped, not reported as an error and not "rewritten" or "renamed".
 func TestWalkDir_BrokenSymlinkSkippedWithoutError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("creating symlinks on Windows typically requires admin privileges")
-	}
+	requireSymlinks(t)
 
 	root := t.TempDir()
 	broken := filepath.Join(root, "alpha-broken")
