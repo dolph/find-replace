@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -75,5 +76,20 @@ func TestNewFile(t *testing.T) {
 				t.Errorf("NewFile(%q).Path = %q; want an absolute path", tc.input, got.Path)
 			}
 		})
+	}
+}
+
+func TestHasSpecialFileModeBits(t *testing.T) {
+	if !hasSpecialFileModeBits(os.ModeSetuid | 0o755) {
+		t.Error("expected setuid bit to be detected")
+	}
+	if !hasSpecialFileModeBits(os.ModeSetgid | 0o755) {
+		t.Error("expected setgid bit to be detected")
+	}
+	if !hasSpecialFileModeBits(os.ModeSticky | 0o755) {
+		t.Error("expected sticky bit to be detected")
+	}
+	if hasSpecialFileModeBits(0o644) {
+		t.Error("expected plain mode to pass through")
 	}
 }
