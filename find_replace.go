@@ -184,14 +184,9 @@ func (fr *findReplace) RenameFile(f *File) error {
 	}
 
 	newPath := filepath.Join(f.Dir(), newBaseName)
-	if _, err := os.Stat(newPath); err == nil {
-		return fmt.Errorf("refusing to rename %v to %v: %v already exists", f.Path, newBaseName, newPath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("stat rename destination %v: %w", newPath, err)
-	}
 
 	log.Printf("Renaming %v to %v", f.Path, newBaseName)
-	if err := os.Rename(f.Path, newPath); err != nil {
+	if err := atomicRenameNoReplace(f.Path, newPath); err != nil {
 		return fmt.Errorf("rename %v to %v: %w", f.Path, newBaseName, err)
 	}
 	return nil
