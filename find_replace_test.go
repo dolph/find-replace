@@ -169,7 +169,7 @@ func TestWalkDir(t *testing.T) {
 	f1 := newTestFile(t, d.Path, "why", f1Contents)
 	defer os.Remove(f1.Path)
 
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 	fr.WalkDir(d)
 	if err := fr.errs.err(); err != nil {
 		t.Fatalf("WalkDir reported errors: %v", err)
@@ -228,7 +228,7 @@ func TestHandleFileWithDir(t *testing.T) {
 	defer os.Remove(f.Path)
 	expectedPath := filepath.Join(f.Dir(), strings.ReplaceAll(f.Base(), find, replace))
 	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 
 	assertFileExists(t, f)
 	if err := fr.HandleFile(f); err != nil {
@@ -252,7 +252,7 @@ func TestHandleFileWithIgnoredDir(t *testing.T) {
 	unexpectedName := strings.ReplaceAll(f.Base(), find, replace)
 	unexpectedPath := filepath.Join(f.Dir(), unexpectedName)
 	defer os.Remove(unexpectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 
 	assertFileExists(t, f)
 	if err := fr.HandleFile(f); err != nil {
@@ -272,7 +272,7 @@ func TestHandleFileWithFile(t *testing.T) {
 	expectedName := strings.ReplaceAll(f.Base(), find, replace)
 	expectedPath := filepath.Join(f.Dir(), expectedName)
 	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 
 	assertFileExists(t, f)
 	if err := fr.HandleFile(f); err != nil {
@@ -296,7 +296,7 @@ func TestRenameFile(t *testing.T) {
 	expectedName := strings.ReplaceAll(f.Base(), find, replace)
 	expectedPath := filepath.Join(f.Dir(), expectedName)
 	defer os.Remove(expectedPath)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 
 	assertFileExists(t, f)
 	if err := fr.RenameFile(f); err != nil {
@@ -323,7 +323,7 @@ func TestReplaceContents(t *testing.T) {
 
 	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 	if err := fr.ReplaceContents(f); err != nil {
 		t.Fatalf("ReplaceContents(%q): %v", f.Path, err)
 	}
@@ -338,7 +338,7 @@ func TestReplaceContentsEntireFile(t *testing.T) {
 
 	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 	if err := fr.ReplaceContents(f); err != nil {
 		t.Fatalf("ReplaceContents(%q): %v", f.Path, err)
 	}
@@ -353,7 +353,7 @@ func TestReplaceContentsMultipleMatchesSingleLine(t *testing.T) {
 
 	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 	if err := fr.ReplaceContents(f); err != nil {
 		t.Fatalf("ReplaceContents(%q): %v", f.Path, err)
 	}
@@ -368,7 +368,7 @@ func TestReplaceContentsMultipleMatchesMultipleLines(t *testing.T) {
 
 	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 	if err := fr.ReplaceContents(f); err != nil {
 		t.Fatalf("ReplaceContents(%q): %v", f.Path, err)
 	}
@@ -383,7 +383,7 @@ func TestReplaceContentsNoMatches(t *testing.T) {
 
 	f := newTestFile(t, "", "*", initial)
 	defer os.Remove(f.Path)
-	fr := findReplace{find: find, replace: replace}
+	fr := newFindReplace(find, replace)
 	if err := fr.ReplaceContents(f); err != nil {
 		t.Fatalf("ReplaceContents(%q): %v", f.Path, err)
 	}
@@ -433,7 +433,7 @@ func TestWalkDir_PermissionDeniedSubdirContinues(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(denied, 0700) })
 
 	rootFile := newFileOrFatal(t, root)
-	fr := findReplace{find: "alpha", replace: "beta"}
+	fr := newFindReplace("alpha", "beta")
 	fr.WalkDir(rootFile)
 
 	// The sibling file should have been rewritten despite the denied subtree.
@@ -473,7 +473,7 @@ func TestRenameFile_ReturnsErrorOnExistingDestination(t *testing.T) {
 	}
 
 	f := newFileOrFatal(t, src)
-	fr := findReplace{find: "alpha", replace: "beta"}
+	fr := newFindReplace("alpha", "beta")
 	err := fr.RenameFile(f)
 	if err == nil {
 		t.Fatalf("RenameFile(%q): err = nil; want an error referencing the occupied destination", src)
@@ -516,7 +516,7 @@ func TestWalkDir_BadRenameTargetDoesNotAbortSiblings(t *testing.T) {
 	}
 
 	rootFile := newFileOrFatal(t, root)
-	fr := findReplace{find: "alpha", replace: "beta"}
+	fr := newFindReplace("alpha", "beta")
 	fr.WalkDir(rootFile)
 
 	// The free file should have been renamed.
@@ -679,7 +679,7 @@ func BenchmarkNova(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer()
 		d := CloneRepoToTestDir(b, "git@github.com:openstack/nova.git")
-		fr := findReplace{find: RandomString(2), replace: RandomString(2)}
+		fr := newFindReplace(RandomString(2), RandomString(2))
 		b.StartTimer()
 		fr.WalkDir(d)
 	}
