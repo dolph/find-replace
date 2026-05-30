@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -77,3 +78,28 @@ func TestNewFile(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteUsesCreateTempPrefix(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := NewFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Write("new"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() != "target.txt" {
+			t.Fatalf("unexpected leftover file %q", e.Name())
+		}
+	}
+}
+
