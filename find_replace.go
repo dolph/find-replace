@@ -17,6 +17,9 @@ type findReplace struct {
 	find    string
 	replace string
 
+	renames  []renamePlan
+	renameMu sync.Mutex
+
 	// errs accumulates non-fatal errors that occurred during a walk. The
 	// walker logs each error at the point of failure (preserving the
 	// operator-visible UX) and appends it here so main can surface a
@@ -94,7 +97,7 @@ func run(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	fr.WalkDir(root)
+	fr.walkAndRename(root)
 
 	if err := fr.errs.err(); err != nil {
 		// Each individual error has already been printed at the point of
@@ -170,8 +173,11 @@ func (fr *findReplace) HandleFile(f *File) error {
 		}
 	}
 
-	// Rename the file now that we're otherwise done with it.
-	return fr.RenameFile(f)
+	newBaseName := strings.ReplaceAll(f.Base(), fr.find, fr.replace)
+	if f.Base() != newBaseName {
+		fr.queueRename(f.Path, filepath.Join(f.Dir(), newBaseName))
+	}
+	return nil
 }
 
 // RenameFile renames f to its post-replacement name if (a) the name actually
@@ -182,19 +188,17 @@ func (fr *findReplace) RenameFile(f *File) error {
 	if f.Base() == newBaseName {
 		return nil
 	}
+	return fr.renamePath(f.Path, filepath.Join(f.Dir(), newBaseName))
+}
 
-	newPath := filepath.Join(f.Dir(), newBaseName)
-	if _, err := os.Stat(newPath); err == nil {
-		return fmt.Errorf("refusing to rename %v to %v: %v already exists", f.Path, newBaseName, newPath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("stat rename destination %v: %w", newPath, err)
+// walkAndRename walks the tree depth-first, then applies queued renames in a
+// collision-safe order (two-phase when source and target names overlap).
+func (fr *findReplace) walkAndRename(root *File) {
+	fr.WalkDir(root)
+	if err := fr.applyRenames(); err != nil {
+		log.Print(err)
+		fr.errs.add(err)
 	}
-
-	log.Printf("Renaming %v to %v", f.Path, newBaseName)
-	if err := os.Rename(f.Path, newPath); err != nil {
-		return fmt.Errorf("rename %v to %v: %w", f.Path, newBaseName, err)
-	}
-	return nil
 }
 
 // ReplaceContents rewrites the file at f if its contents contain the find
