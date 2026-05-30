@@ -17,6 +17,9 @@ type findReplace struct {
 	find    string
 	replace string
 
+	contentOnly bool
+	renameOnly  bool
+
 	// errs accumulates non-fatal errors that occurred during a walk. The
 	// walker logs each error at the point of failure (preserving the
 	// operator-visible UX) and appends it here so main can surface a
@@ -69,6 +72,34 @@ func main() {
 	os.Exit(run(os.Args, os.Stderr))
 }
 
+
+func parseRunArgs(args []string) (find, replace string, contentOnly, renameOnly bool, err error) {
+	if len(args) < 3 {
+		return "", "", false, false, fmt.Errorf("usage: find-replace [--content-only|--rename-only] FIND REPLACE")
+	}
+	i := 1
+	for i < len(args) {
+		switch args[i] {
+		case "--content-only":
+			contentOnly = true
+			i++
+		case "--rename-only":
+			renameOnly = true
+			i++
+		default:
+			goto done
+		}
+	}
+done:
+	if contentOnly && renameOnly {
+		return "", "", false, false, fmt.Errorf("cannot pass both --content-only and --rename-only")
+	}
+	if len(args)-i != 2 {
+		return "", "", false, false, fmt.Errorf("usage: find-replace [--content-only|--rename-only] FIND REPLACE")
+	}
+	return args[i], args[i+1], contentOnly, renameOnly, nil
+}
+
 // run is the testable body of main. It returns the process exit code: 0 on
 // clean success, 1 if argument parsing failed or any traversal error was
 // recorded. Output documented in the README (Renaming/Rewriting lines) still
@@ -77,12 +108,16 @@ func run(args []string, stderr io.Writer) int {
 	// Remove date/time from logging output.
 	log.SetFlags(0)
 
-	if len(args) != 3 {
-		fmt.Fprintln(stderr, "Usage: find-replace FIND REPLACE")
+	find, replace, contentOnly, renameOnly, err := parseRunArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 
-	fr := findReplace{find: args[1], replace: args[2]}
+	fr := findReplace{
+		find: find, replace: replace,
+		contentOnly: contentOnly, renameOnly: renameOnly,
+	}
 
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
@@ -163,14 +198,16 @@ func (fr *findReplace) HandleFile(f *File) error {
 			return nil
 		}
 		fr.WalkDir(f)
-	} else {
-		// Replace the contents of regular files.
+	} else if !fr.renameOnly {
 		if err := fr.ReplaceContents(f); err != nil {
 			return err
 		}
 	}
 
-	// Rename the file now that we're otherwise done with it.
+	if fr.contentOnly {
+		return nil
+	}
+
 	return fr.RenameFile(f)
 }
 
