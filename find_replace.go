@@ -17,6 +17,8 @@ type findReplace struct {
 	find    string
 	replace string
 
+	workers chan struct{}
+
 	// errs accumulates non-fatal errors that occurred during a walk. The
 	// walker logs each error at the point of failure (preserving the
 	// operator-visible UX) and appends it here so main can surface a
@@ -69,6 +71,18 @@ func main() {
 	os.Exit(run(os.Args, os.Stderr))
 }
 
+func (fr *findReplace) acquireWorker() {
+	if fr.workers != nil {
+		fr.workers <- struct{}{}
+	}
+}
+
+func (fr *findReplace) releaseWorker() {
+	if fr.workers != nil {
+		<-fr.workers
+	}
+}
+
 // run is the testable body of main. It returns the process exit code: 0 on
 // clean success, 1 if argument parsing failed or any traversal error was
 // recorded. Output documented in the README (Renaming/Rewriting lines) still
@@ -82,7 +96,10 @@ func run(args []string, stderr io.Writer) int {
 		return 1
 	}
 
-	fr := findReplace{find: args[1], replace: args[2]}
+	fr := findReplace{
+		find: args[1], replace: args[2],
+		workers: make(chan struct{}, workerLimit()),
+	}
 
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
@@ -112,6 +129,9 @@ func run(args []string, stderr io.Writer) int {
 // A failure to read the directory itself is recorded and returned to the
 // caller, but does not abort the rest of the walk in any other subtree.
 func (fr *findReplace) WalkDir(f *File) {
+	if fr.workers == nil {
+		fr.workers = make(chan struct{}, workerLimit())
+	}
 	var wg sync.WaitGroup
 
 	// List the files in this directory.
@@ -131,9 +151,13 @@ func (fr *findReplace) WalkDir(f *File) {
 			fr.errs.add(err)
 			continue
 		}
+		fr.acquireWorker()
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer func() {
+				fr.releaseWorker()
+				wg.Done()
+			}()
 			if err := fr.HandleFile(childFile); err != nil {
 				log.Print(err)
 				fr.errs.add(err)
