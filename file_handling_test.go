@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -77,3 +78,44 @@ func TestNewFile(t *testing.T) {
 		})
 	}
 }
+
+func TestReadSkipsBinaryWithNUL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mixed.txt")
+	content := []byte("text prefix\x00binary suffix")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := NewFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("Read() = %q; want empty for NUL-containing file", got)
+	}
+}
+
+func TestReadReturnsShortTextFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "short.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := NewFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "hello" {
+		t.Fatalf("Read() = %q; want %q", got, "hello")
+	}
+}
+

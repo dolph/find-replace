@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/tools/godoc/util"
+	"unicode/utf8"
+	"bytes"
 )
 
 type File struct {
@@ -60,8 +60,8 @@ func (f *File) Mode() (os.FileMode, error) {
 }
 
 // Read reads the file into a string, or returns the empty string for binary
-// files. An error indicates the file could not be opened or fully read; the
-// caller should log-and-skip rather than abort.
+// files (NUL bytes or invalid UTF-8). An error indicates the file could not be
+// opened or fully read; the caller should log-and-skip rather than abort.
 func (f *File) Read() (string, error) {
 	handle, err := os.Open(f.Path)
 	if err != nil {
@@ -69,21 +69,46 @@ func (f *File) Read() (string, error) {
 	}
 	defer handle.Close()
 
-	// Check if the file looks like text before reading the entire file.
 	var buf [1024]byte
-	n, err := handle.Read(buf[0:])
-	if err != nil || !util.IsText(buf[0:n]) {
+	n, err := handle.Read(buf[:])
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("read %v: %w", f.Path, err)
+	}
+	if n == 0 {
 		return "", nil
 	}
-
-	// Reset file handle so we can read the entire file.
-	if _, err := handle.Seek(0, io.SeekStart); err != nil {
-		return "", fmt.Errorf("seek to start of %v: %w", f.Path, err)
+	if !isTextBytes(buf[:n]) {
+		return "", nil
+	}
+	if err == io.EOF {
+		return string(buf[:n]), nil
 	}
 
 	builder := new(strings.Builder)
-	if _, err := io.Copy(builder, handle); err != nil {
-		return "", fmt.Errorf("read %v: %w", f.Path, err)
+	if _, wErr := builder.Write(buf[:n]); wErr != nil {
+		return "", fmt.Errorf("read %v: %w", f.Path, wErr)
+	}
+
+	chunk := make([]byte, 32*1024)
+	for {
+		readN, readErr := handle.Read(chunk)
+		if readN > 0 {
+			if bytes.IndexByte(chunk[:readN], 0) >= 0 {
+				return "", nil
+			}
+			if !utf8.Valid(chunk[:readN]) {
+				return "", nil
+			}
+			if _, wErr := builder.Write(chunk[:readN]); wErr != nil {
+				return "", fmt.Errorf("read %v: %w", f.Path, wErr)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return "", fmt.Errorf("read %v: %w", f.Path, readErr)
+		}
 	}
 	return builder.String(), nil
 }
