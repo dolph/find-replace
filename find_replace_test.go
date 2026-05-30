@@ -170,7 +170,7 @@ func TestWalkDir(t *testing.T) {
 	defer os.Remove(f1.Path)
 
 	fr := findReplace{find: find, replace: replace}
-	fr.WalkDir(d)
+	fr.walkAndRename(d)
 	if err := fr.errs.err(); err != nil {
 		t.Fatalf("WalkDir reported errors: %v", err)
 	}
@@ -234,6 +234,9 @@ func TestHandleFileWithDir(t *testing.T) {
 	if err := fr.HandleFile(f); err != nil {
 		t.Fatalf("HandleFile(%q): %v", f.Path, err)
 	}
+	if err := fr.applyRenames(); err != nil {
+		t.Fatal(err)
+	}
 	assertPathExistsAfterRename(t, f, expectedPath)
 }
 
@@ -277,6 +280,9 @@ func TestHandleFileWithFile(t *testing.T) {
 	assertFileExists(t, f)
 	if err := fr.HandleFile(f); err != nil {
 		t.Fatalf("HandleFile(%q): %v", f.Path, err)
+	}
+	if err := fr.applyRenames(); err != nil {
+		t.Fatal(err)
 	}
 	assertPathExistsAfterRename(t, f, expectedPath)
 
@@ -434,7 +440,7 @@ func TestWalkDir_PermissionDeniedSubdirContinues(t *testing.T) {
 
 	rootFile := newFileOrFatal(t, root)
 	fr := findReplace{find: "alpha", replace: "beta"}
-	fr.WalkDir(rootFile)
+	fr.walkAndRename(rootFile)
 
 	// The sibling file should have been rewritten despite the denied subtree.
 	got, err := os.ReadFile(siblingFile)
@@ -517,7 +523,7 @@ func TestWalkDir_BadRenameTargetDoesNotAbortSiblings(t *testing.T) {
 
 	rootFile := newFileOrFatal(t, root)
 	fr := findReplace{find: "alpha", replace: "beta"}
-	fr.WalkDir(rootFile)
+	fr.walkAndRename(rootFile)
 
 	// The free file should have been renamed.
 	freeRenamed := filepath.Join(root, "free-beta")
@@ -675,12 +681,37 @@ func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
 	return d
 }
 
+func TestApplyRenamesSwap(t *testing.T) {
+	root := newTestDir(t, "", "*")
+	defer os.Remove(root.Path)
+
+	a := newTestFile(t, root.Path, "foo", "a")
+	defer os.Remove(a.Path)
+	b := newTestFile(t, root.Path, "bar", "b")
+	defer os.Remove(b.Path)
+
+	fr := findReplace{find: "foo", replace: "bar"}
+	fr.queueRename(a.Path, filepath.Join(root.Path, "bar"))
+	fr.queueRename(b.Path, filepath.Join(root.Path, "foo"))
+
+	if err := fr.applyRenames(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root.Path, "bar")); err != nil {
+		t.Fatalf("expected former foo file at bar: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root.Path, "foo")); err != nil {
+		t.Fatalf("expected former bar file at foo: %v", err)
+	}
+}
+
 func BenchmarkNova(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer()
 		d := CloneRepoToTestDir(b, "git@github.com:openstack/nova.git")
 		fr := findReplace{find: RandomString(2), replace: RandomString(2)}
 		b.StartTimer()
-		fr.WalkDir(d)
+		fr.walkAndRename(d)
 	}
 }
