@@ -124,6 +124,9 @@ func (fr *findReplace) WalkDir(f *File) {
 	}
 
 	for _, file := range files {
+		if file.Type()&os.ModeSymlink != 0 {
+			continue
+		}
 		childPath := filepath.Join(f.Path, file.Name())
 		childFile, err := NewFile(childPath)
 		if err != nil {
@@ -151,6 +154,12 @@ func (fr *findReplace) WalkDir(f *File) {
 // the rename step; the failure is returned so the walker can log it and
 // continue with siblings.
 func (fr *findReplace) HandleFile(f *File) error {
+	if li, err := os.Lstat(f.Path); err != nil {
+		return err
+	} else if li.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+
 	info, err := f.Info()
 	if err != nil {
 		return err
