@@ -93,14 +93,19 @@ func (f *File) Read() (string, error) {
 // step after its creation fails (including the rename); on success the remove
 // is a no-op because the file has already been renamed away.
 func (f *File) Write(content string) error {
-	mode, err := f.Mode()
+	info, err := f.Info()
 	if err != nil {
 		return err
 	}
+	mode := info.Mode()
+	modTime := info.ModTime()
 
 	tempName := filepath.Join(f.Dir(), RandomString(20))
 	if err := os.WriteFile(tempName, []byte(content), mode); err != nil {
 		return fmt.Errorf("create tempfile in %v: %w", f.Dir(), err)
+	}
+	if err := os.Chtimes(tempName, modTime, modTime); err != nil {
+		return fmt.Errorf("preserve mtime on temp file %v: %w", tempName, err)
 	}
 	// Make sure the temp file is removed if the rename below fails. On
 	// success, the rename has already moved the file to f.Path so this is
