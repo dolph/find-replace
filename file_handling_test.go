@@ -1,8 +1,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestNewFile exercises NewFile's path-resolution behavior.
@@ -75,5 +77,33 @@ func TestNewFile(t *testing.T) {
 				t.Errorf("NewFile(%q).Path = %q; want an absolute path", tc.input, got.Path)
 			}
 		})
+	}
+}
+
+func TestFileWritePreservesModTime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mtime.txt")
+	if err := os.WriteFile(path, []byte("before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2019, 3, 14, 15, 9, 26, 0, time.UTC)
+	if err := os.Chtimes(path, want, want); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := NewFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Write("after"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ModTime().Equal(want) {
+		t.Fatalf("ModTime = %v; want %v", got.ModTime(), want)
 	}
 }
