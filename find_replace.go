@@ -200,13 +200,5 @@ func (fr *findReplace) RenameFile(f *File) error {
 // ReplaceContents rewrites the file at f if its contents contain the find
 // string. Binary-looking files (where Read returns "") are skipped silently.
 func (fr *findReplace) ReplaceContents(f *File) error {
-	content, err := f.Read()
-	if err != nil {
-		return err
-	}
-	if !strings.Contains(content, fr.find) {
-		return nil
-	}
-	newContent := strings.ReplaceAll(content, fr.find, fr.replace)
-	return f.Write(newContent)
+	return f.streamFindReplace(fr.find, fr.replace)
 }
