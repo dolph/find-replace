@@ -660,27 +660,30 @@ func withWorkingDir(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 }
 
-func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
+func cloneRepoToBenchDir(b *testing.B, repoURL string) *File {
 	b.Helper()
-	d := newTestDir(b, "", "*")
-	defer os.Remove(d.Path)
+	d := newTestDir(b, "", "bench")
+	b.Cleanup(func() { _ = os.RemoveAll(d.Path) })
 
-	cmd := exec.Command("git", "clone", "--depth=1", "--single-branch", repoUrl, ".")
+	cmd := exec.Command("git", "clone", "--depth=1", "--single-branch", repoURL, ".")
 	cmd.Dir = d.Path
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		b.Errorf("failed to clone repo: %s", out)
+		b.Fatalf("failed to clone repo: %s", out)
 	}
 
 	return d
 }
 
 func BenchmarkNova(b *testing.B) {
+	const repoURL = "https://github.com/openstack/nova.git"
+
+	b.StopTimer()
+	d := cloneRepoToBenchDir(b, repoURL)
+	fr := findReplace{find: RandomString(2), replace: RandomString(2)}
+	b.ResetTimer()
+
 	for n := 0; n < b.N; n++ {
-		b.StopTimer()
-		d := CloneRepoToTestDir(b, "git@github.com:openstack/nova.git")
-		fr := findReplace{find: RandomString(2), replace: RandomString(2)}
-		b.StartTimer()
 		fr.WalkDir(d)
 	}
 }
