@@ -660,6 +660,37 @@ func withWorkingDir(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 }
 
+
+func TestHandleFileSkipsSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink test requires unix")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	f, err := NewFile(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fr := findReplace{find: "secret", replace: "public"}
+	if err := fr.HandleFile(f); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "secret" {
+		t.Fatalf("symlink target modified: %q", got)
+	}
+}
+
 func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
 	b.Helper()
 	d := newTestDir(b, "", "*")
