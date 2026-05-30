@@ -88,6 +88,62 @@ func (f *File) Read() (string, error) {
 	return builder.String(), nil
 }
 
+// streamFindReplace rewrites file contents via streamReplace, skipping binary
+// files and leaving the file unchanged when find does not occur.
+func (f *File) streamFindReplace(find, replace string) error {
+	mode, err := f.Mode()
+	if err != nil {
+		return err
+	}
+
+	in, err := os.Open(f.Path)
+	if err != nil {
+		return fmt.Errorf("open %v: %w", f.Path, err)
+	}
+	defer in.Close()
+
+	var head [1024]byte
+	n, err := in.Read(head[:])
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("read %v: %w", f.Path, err)
+	}
+	if n == 0 || !util.IsText(head[:n]) {
+		return nil
+	}
+	if _, err := in.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("seek to start of %v: %w", f.Path, err)
+	}
+
+	tempName := filepath.Join(f.Dir(), RandomString(20))
+	out, err := os.OpenFile(tempName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf("create tempfile in %v: %w", f.Dir(), err)
+	}
+
+	changed, err := streamReplace(in, out, []byte(find), []byte(replace))
+	closeErr := out.Close()
+	if err != nil {
+		_ = os.Remove(tempName)
+		return fmt.Errorf("rewrite %v: %w", f.Path, err)
+	}
+	if closeErr != nil {
+		_ = os.Remove(tempName)
+		return fmt.Errorf("close tempfile for %v: %w", f.Path, closeErr)
+	}
+	if !changed {
+		_ = os.Remove(tempName)
+		return nil
+	}
+	defer os.Remove(tempName)
+
+	log.Printf("Rewriting %v", f.Path)
+	if err := os.Rename(tempName, f.Path); err != nil {
+		return fmt.Errorf("atomically move temp file %v to %v: %w", tempName, f.Path, err)
+	}
+	return nil
+}
+
+
 // Write atomically replaces the file with content, via a temp file + rename.
 // A deferred os.Remove(tempName) ensures the temp file is cleaned up if any
 // step after its creation fails (including the rename); on success the remove
