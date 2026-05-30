@@ -73,12 +73,28 @@ func main() {
 // clean success, 1 if argument parsing failed or any traversal error was
 // recorded. Output documented in the README (Renaming/Rewriting lines) still
 // goes to log.Default(); usage and aggregated error summaries go to stderr.
+
+func validateFindReplace(find, replace string) error {
+	if find == "" {
+		return fmt.Errorf("FIND must not be empty")
+	}
+	if find == replace {
+		return fmt.Errorf("FIND and REPLACE must be different")
+	}
+	return nil
+}
+
 func run(args []string, stderr io.Writer) int {
 	// Remove date/time from logging output.
 	log.SetFlags(0)
 
 	if len(args) != 3 {
 		fmt.Fprintln(stderr, "Usage: find-replace FIND REPLACE")
+		return 1
+	}
+
+	if err := validateFindReplace(args[1], args[2]); err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 
