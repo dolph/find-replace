@@ -13,11 +13,17 @@ Renaming ./alphabet to betabet
 ```
 
 * Files with matching contents in the current working directory are atomically rewritten.
-* Files and directories are renamed.
+* Files and directories are renamed (depth-first: contents before names).
 * Searches are performed recursively from the current working directory.
 * Searches are case sensitive.
 * `.git/` directories are skipped.
-* Binary files are ignored.
+* Binary-looking files are ignored.
+* Rename is refused when the destination path already exists.
+* Errors are logged per file or directory; the process exits with status 1 if any operation failed.
+
+## Security model
+
+`find-replace` is intended for batch find/replace in a working tree you control. It performs atomic rewrites via a temporary file in the same directory and does not overwrite an existing destination during rename. Run it only in trusted directories; symlink hardening is not a current guarantee—see open issues for planned improvements.
 
 ## Goal
 
