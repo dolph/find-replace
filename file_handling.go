@@ -14,6 +14,7 @@ import (
 type File struct {
 	Path string
 	info os.FileInfo
+	isDir *bool
 }
 
 // NewFile resolves path to an absolute path and wraps it in a *File. It
@@ -27,12 +28,34 @@ func NewFile(path string) (*File, error) {
 	return &File{Path: absPath}, nil
 }
 
+// NewChildFile joins name under an already-absolute parent without calling filepath.Abs again.
+func NewChildFile(parent *File, name string, entry os.DirEntry) *File {
+	child := &File{Path: filepath.Join(parent.Path, name)}
+	if entry != nil {
+		isDir := entry.IsDir()
+		child.isDir = &isDir
+	}
+	return child
+}
+
 func (f *File) Base() string {
 	return filepath.Base(f.Path)
 }
 
 func (f *File) Dir() string {
 	return filepath.Dir(f.Path)
+}
+
+// IsDir reports whether f is a directory, using DirEntry metadata when available.
+func (f *File) IsDir() bool {
+	if f.isDir != nil {
+		return *f.isDir
+	}
+	info, err := f.Info()
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
 
 // Info lazily stats the file and caches the result. It returns an error if

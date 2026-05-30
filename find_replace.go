@@ -123,14 +123,8 @@ func (fr *findReplace) WalkDir(f *File) {
 		return
 	}
 
-	for _, file := range files {
-		childPath := filepath.Join(f.Path, file.Name())
-		childFile, err := NewFile(childPath)
-		if err != nil {
-			log.Print(err)
-			fr.errs.add(err)
-			continue
-		}
+	for _, entry := range files {
+		childFile := NewChildFile(f, entry.Name(), entry)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -151,13 +145,8 @@ func (fr *findReplace) WalkDir(f *File) {
 // the rename step; the failure is returned so the walker can log it and
 // continue with siblings.
 func (fr *findReplace) HandleFile(f *File) error {
-	info, err := f.Info()
-	if err != nil {
-		return err
-	}
-
 	// If file is a directory, recurse immediately (depth-first).
-	if info.IsDir() {
+	if f.IsDir() {
 		// Ignore certain directories
 		if f.Base() == ".git" {
 			return nil

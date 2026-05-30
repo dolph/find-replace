@@ -6,6 +6,20 @@ import (
 )
 
 // TestNewFile exercises NewFile's path-resolution behavior.
+
+func TestNewChildFile(t *testing.T) {
+	tmp := t.TempDir()
+	parent, err := NewFile(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := NewChildFile(parent, "sub", nil)
+	want := filepath.Join(parent.Path, "sub")
+	if child.Path != want {
+		t.Fatalf("NewChildFile path = %q; want %q", child.Path, want)
+	}
+}
+
 func TestNewFile(t *testing.T) {
 	tmp := t.TempDir()
 
