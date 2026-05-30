@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -13,9 +14,18 @@ import (
 
 // findReplace is a struct used to provide context to all find & replace
 // operations, including the strings to search for & replace.
+func newFindReplace(find, replace string) findReplace {
+	return findReplace{
+		find: find, replace: replace,
+		findB: []byte(find), replaceB: []byte(replace),
+	}
+}
+
 type findReplace struct {
 	find    string
 	replace string
+	findB    []byte
+	replaceB []byte
 
 	// errs accumulates non-fatal errors that occurred during a walk. The
 	// walker logs each error at the point of failure (preserving the
@@ -82,7 +92,7 @@ func run(args []string, stderr io.Writer) int {
 		return 1
 	}
 
-	fr := findReplace{find: args[1], replace: args[2]}
+	fr := newFindReplace(args[1], args[2])
 
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
@@ -204,9 +214,9 @@ func (fr *findReplace) ReplaceContents(f *File) error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(content, fr.find) {
+	if !bytes.Contains([]byte(content), fr.findB) {
 		return nil
 	}
-	newContent := strings.ReplaceAll(content, fr.find, fr.replace)
-	return f.Write(newContent)
+	newContent := bytes.ReplaceAll([]byte(content), fr.findB, fr.replaceB)
+	return f.Write(string(newContent))
 }
