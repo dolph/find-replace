@@ -77,6 +77,11 @@ func run(args []string, stderr io.Writer) int {
 	// Remove date/time from logging output.
 	log.SetFlags(0)
 
+	if len(args) == 2 && (args[1] == "-v" || args[1] == "--version") {
+		fmt.Fprintln(stderr, versionString())
+		return 0
+	}
+
 	if len(args) != 3 {
 		fmt.Fprintln(stderr, "Usage: find-replace FIND REPLACE")
 		return 1
