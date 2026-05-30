@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -658,6 +659,29 @@ func withWorkingDir(t *testing.T, dir string) {
 		t.Fatalf("Chdir(%q): %v", dir, err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(prev) })
+}
+
+
+func TestValidateFindReplace(t *testing.T) {
+	cases := []struct {
+		find, replace string
+		wantErr       bool
+	}{
+		{"", "b", true},
+		{"a", "a", true},
+		{"a", "b", false},
+	}
+	for _, tc := range cases {
+		if err := validateFindReplace(tc.find, tc.replace); (err != nil) != tc.wantErr {
+			t.Fatalf("validateFindReplace(%q,%q) err=%v; wantErr=%v", tc.find, tc.replace, err, tc.wantErr)
+		}
+	}
+}
+
+func TestRunRejectsEmptyFind(t *testing.T) {
+	if code := run([]string{"find-replace", "", "b"}, io.Discard); code == 0 {
+		t.Fatal("expected non-zero exit for empty FIND")
+	}
 }
 
 func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
