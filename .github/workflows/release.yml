@@ -118,16 +118,26 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build release binary
+      - name: Build release binaries
         if: steps.bump.outputs.bump != 'skip'
-        # Static linux/amd64 binary. CGO off so the binary has no glibc
-        # dependency; -trimpath + -s -w shrinks size and strips local paths.
+        # Static binaries for common platforms. CGO off avoids glibc dependency.
         run: |
           set -euo pipefail
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -trimpath -ldflags="-s -w" \
-            -o find-replace-linux-amd64 .
-          ls -l find-replace-linux-amd64
+          build_one() {
+            local goos="$1" goarch="$2" ext="${3:-}"
+            local out="find-replace-${goos}-${goarch}${ext}"
+            echo "Building ${out}"
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
+              go build -trimpath -ldflags="-s -w" -o "${out}" .
+            ls -l "${out}"
+          }
+          build_one linux amd64
+          build_one linux arm64
+          build_one darwin amd64
+          build_one darwin arm64
+          build_one windows amd64 .exe
+          sha256sum find-replace-* > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Create and push tag
         if: steps.bump.outputs.bump != 'skip'
@@ -152,7 +162,7 @@ jobs:
           if [[ "${prev}" != "v0.0.0" ]]; then
             notes_args+=(--notes-start-tag "${prev}")
           fi
-          gh release create "${tag}" find-replace-linux-amd64 \
+          gh release create "${tag}" find-replace-* SHA256SUMS \
             --target "${HEAD_SHA}" \
             --title "${tag}" \
             "${notes_args[@]}"
