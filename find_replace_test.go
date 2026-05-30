@@ -660,6 +660,47 @@ func withWorkingDir(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 }
 
+
+func TestReplaceContentsSkipsSetuidFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("special mode bits not applicable")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "setuid.txt")
+	if err := os.WriteFile(path, []byte("needle"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o4755); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := NewFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mode, err := f.Mode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasSpecialFileModeBits(mode) {
+		t.Skip("setuid bit not supported in this environment")
+	}
+
+	fr := findReplace{find: "needle", replace: "hay"}
+	if err := fr.ReplaceContents(f); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "needle" {
+		t.Fatalf("content = %q; want unchanged %q", got, "needle")
+	}
+}
+
 func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
 	b.Helper()
 	d := newTestDir(b, "", "*")
