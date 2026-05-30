@@ -163,6 +163,9 @@ func (fr *findReplace) HandleFile(f *File) error {
 			return nil
 		}
 		fr.WalkDir(f)
+	} else if strings.HasPrefix(f.Base(), tempFilePrefix) {
+		// Skip orphan temp files left by interrupted rewrites.
+		return nil
 	} else {
 		// Replace the contents of regular files.
 		if err := fr.ReplaceContents(f); err != nil {
