@@ -28,3 +28,9 @@ jobs:
 
       - name: go test
         run: go test -race ./...
+
+      - uses: dominikh/staticcheck-action@v1
+        with:
+          version: latest
+
+      - uses: golang/govulncheck-action@v1
