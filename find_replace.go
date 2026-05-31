@@ -124,6 +124,9 @@ func (fr *findReplace) WalkDir(f *File) {
 	}
 
 	for _, file := range files {
+		if strings.HasPrefix(file.Name(), ".find-replace-") {
+			continue
+		}
 		childPath := filepath.Join(f.Path, file.Name())
 		childFile, err := NewFile(childPath)
 		if err != nil {
@@ -154,6 +157,10 @@ func (fr *findReplace) HandleFile(f *File) error {
 	info, err := f.Info()
 	if err != nil {
 		return err
+	}
+
+	if strings.HasPrefix(f.Base(), ".find-replace-") {
+		return nil
 	}
 
 	// If file is a directory, recurse immediately (depth-first).

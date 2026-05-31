@@ -684,3 +684,42 @@ func BenchmarkNova(b *testing.B) {
 		fr.WalkDir(d)
 	}
 }
+
+func TestSkipStaleTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("alpha"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".find-replace-stale"), []byte("alpha"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+
+	code := run([]string{"find-replace", "alpha", "beta"}, ioDiscard{t})
+	if code != 0 {
+		t.Fatalf("run exit = %d; want 0", code)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".find-replace-stale")); err != nil {
+		t.Fatalf("stale temp file should remain untouched: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "keep.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "beta" {
+		t.Fatalf("keep.txt = %q; want beta", got)
+	}
+}
+
+type ioDiscard struct{ t *testing.T }
+
+func (d ioDiscard) Write(p []byte) (int, error) { return len(p), nil }
