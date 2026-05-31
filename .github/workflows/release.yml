@@ -120,12 +120,23 @@ jobs:
 
       - name: Build release binary
         if: steps.bump.outputs.bump != 'skip'
-        # Static linux/amd64 binary. CGO off so the binary has no glibc
-        # dependency; -trimpath + -s -w shrinks size and strips local paths.
+        env:
+          TAG: ${{ steps.tag.outputs.next }}
         run: |
           set -euo pipefail
+          COMMIT="${HEAD_SHA:0:7}"
+          GO_VERSION="$(go version | cut -d' ' -f3)"
+          BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          LD="-s -w \
+            -X 'main.GitTag=${TAG}' \
+            -X 'main.GitCommit=${COMMIT}' \
+            -X 'main.GoVersion=${GO_VERSION}' \
+            -X 'main.BuildTimestamp=${BUILD_DATE}' \
+            -X 'main.BuildOS=linux' \
+            -X 'main.BuildArch=amd64' \
+            -X 'main.BuildTainted=false'"
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -trimpath -ldflags="-s -w" \
+            go build -trimpath -ldflags="${LD}" \
             -o find-replace-linux-amd64 .
           ls -l find-replace-linux-amd64
 
