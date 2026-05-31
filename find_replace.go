@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -16,6 +15,7 @@ import (
 type findReplace struct {
 	find    string
 	replace string
+	pattern *Pattern
 
 	// errs accumulates non-fatal errors that occurred during a walk. The
 	// walker logs each error at the point of failure (preserving the
@@ -57,6 +57,19 @@ func (a *errAccumulator) err() error {
 	return errors.Join(a.errs...)
 }
 
+
+func (fr *findReplace) ensurePattern() error {
+	if fr.pattern != nil {
+		return nil
+	}
+	p, err := Compile(fr.find, fr.replace, true)
+	if err != nil {
+		return err
+	}
+	fr.pattern = p
+	return nil
+}
+
 // main processes command line arguments, builds the context struct, and begins
 // the process of walking the current working directory.
 //
@@ -83,6 +96,10 @@ func run(args []string, stderr io.Writer) int {
 	}
 
 	fr := findReplace{find: args[1], replace: args[2]}
+	if err := fr.ensurePattern(); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
 	// Recursively explore the hierarchy depth first, rewrite files as needed,
 	// and rename files last (after we don't have to revisit them).
@@ -178,7 +195,10 @@ func (fr *findReplace) HandleFile(f *File) error {
 // changes and (b) no file already exists at the destination. It returns an
 // error if the destination is occupied or if the os.Rename itself fails.
 func (fr *findReplace) RenameFile(f *File) error {
-	newBaseName := strings.ReplaceAll(f.Base(), fr.find, fr.replace)
+	if err := fr.ensurePattern(); err != nil {
+		return err
+	}
+	newBaseName := fr.pattern.Replace(f.Base())
 	if f.Base() == newBaseName {
 		return nil
 	}
@@ -200,13 +220,16 @@ func (fr *findReplace) RenameFile(f *File) error {
 // ReplaceContents rewrites the file at f if its contents contain the find
 // string. Binary-looking files (where Read returns "") are skipped silently.
 func (fr *findReplace) ReplaceContents(f *File) error {
+	if err := fr.ensurePattern(); err != nil {
+		return err
+	}
 	content, err := f.Read()
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(content, fr.find) {
+	if !fr.pattern.Match(content) {
 		return nil
 	}
-	newContent := strings.ReplaceAll(content, fr.find, fr.replace)
+	newContent := fr.pattern.Replace(content)
 	return f.Write(newContent)
 }
