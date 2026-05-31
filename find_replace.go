@@ -15,6 +15,7 @@ import (
 type findReplace struct {
 	find    string
 	replace string
+	regex   bool
 	pattern *Pattern
 
 	// errs accumulates non-fatal errors that occurred during a walk. The
@@ -57,12 +58,11 @@ func (a *errAccumulator) err() error {
 	return errors.Join(a.errs...)
 }
 
-
 func (fr *findReplace) ensurePattern() error {
 	if fr.pattern != nil {
 		return nil
 	}
-	p, err := Compile(fr.find, fr.replace, true)
+	p, err := Compile(fr.find, fr.replace, !fr.regex)
 	if err != nil {
 		return err
 	}
@@ -82,6 +82,27 @@ func main() {
 	os.Exit(run(os.Args, os.Stderr))
 }
 
+func parseRunArgs(args []string) (find, replace string, regex bool, err error) {
+	if len(args) < 3 {
+		return "", "", false, fmt.Errorf("usage: find-replace [-e|--regex] FIND REPLACE")
+	}
+	i := 1
+	for i < len(args) {
+		switch args[i] {
+		case "-e", "--regex":
+			regex = true
+			i++
+		default:
+			goto done
+		}
+	}
+done:
+	if len(args)-i != 2 {
+		return "", "", false, fmt.Errorf("usage: find-replace [-e|--regex] FIND REPLACE")
+	}
+	return args[i], args[i+1], regex, nil
+}
+
 // run is the testable body of main. It returns the process exit code: 0 on
 // clean success, 1 if argument parsing failed or any traversal error was
 // recorded. Output documented in the README (Renaming/Rewriting lines) still
@@ -90,12 +111,13 @@ func run(args []string, stderr io.Writer) int {
 	// Remove date/time from logging output.
 	log.SetFlags(0)
 
-	if len(args) != 3 {
-		fmt.Fprintln(stderr, "Usage: find-replace FIND REPLACE")
+	find, replace, regex, err := parseRunArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 
-	fr := findReplace{find: args[1], replace: args[2]}
+	fr := findReplace{find: find, replace: replace, regex: regex}
 	if err := fr.ensurePattern(); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

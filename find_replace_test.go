@@ -641,8 +641,92 @@ func TestRun_BadArgCountPrintsUsage(t *testing.T) {
 	if got == 0 {
 		t.Errorf("run = 0; want non-zero")
 	}
-	if !strings.Contains(stderr.String(), "Usage: find-replace") {
+	if !strings.Contains(stderr.String(), "usage: find-replace") {
 		t.Errorf("stderr = %q; want it to contain a usage line", stderr.String())
+	}
+}
+
+func TestParseRunArgs_RegexFlag(t *testing.T) {
+	tests := []struct {
+		args         []string
+		wantFind     string
+		wantReplace  string
+		wantRegex    bool
+		wantErr      bool
+	}{
+		{[]string{"find-replace", "a", "b"}, "a", "b", false, false},
+		{[]string{"find-replace", "-e", "a", "b"}, "a", "b", true, false},
+		{[]string{"find-replace", "--regex", "a", "b"}, "a", "b", true, false},
+		{[]string{"find-replace", "-e"}, "", "", false, true},
+		{[]string{"find-replace", "-e", "only"}, "", "", false, true},
+	}
+	for _, tc := range tests {
+		find, replace, regex, err := parseRunArgs(tc.args)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("parseRunArgs(%v) err = nil; want error", tc.args)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("parseRunArgs(%v) err = %v", tc.args, err)
+		}
+		if find != tc.wantFind || replace != tc.wantReplace || regex != tc.wantRegex {
+			t.Errorf("parseRunArgs(%v) = (%q, %q, %v); want (%q, %q, %v)",
+				tc.args, find, replace, regex, tc.wantFind, tc.wantReplace, tc.wantRegex)
+		}
+	}
+}
+
+func TestRun_InvalidRegexExitsNonZero(t *testing.T) {
+	var stderr bytes.Buffer
+	got := run([]string{"find-replace", "-e", "[unclosed", "x"}, &stderr)
+	if got == 0 {
+		t.Fatalf("run = 0; want non-zero")
+	}
+	if !strings.Contains(stderr.String(), "compile pattern") {
+		t.Errorf("stderr = %q; want compile error", stderr.String())
+	}
+}
+
+func TestRun_RegexModeRewritesContent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "alpha.txt"), []byte("foo123bar"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	withWorkingDir(t, dir)
+
+	var stderr bytes.Buffer
+	got := run([]string{"find-replace", "-e", `\d+`, "NUM"}, &stderr)
+	if got != 0 {
+		t.Fatalf("run = %d; want 0 (stderr: %q)", got, stderr.String())
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "alpha.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(content) != "fooNUMbar" {
+		t.Errorf("content = %q; want fooNUMbar", string(content))
+	}
+}
+
+func TestRun_RegexModeRenamesFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "item_test.go"), []byte("package main"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	withWorkingDir(t, dir)
+
+	var stderr bytes.Buffer
+	got := run([]string{"find-replace", "-e", `(\w+)_test\.go`, "$1.test.go"}, &stderr)
+	if got != 0 {
+		t.Fatalf("run = %d; want 0 (stderr: %q)", got, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "item.test.go")); err != nil {
+		t.Fatalf("Stat item.test.go: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "item_test.go")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("item_test.go still exists: %v", err)
 	}
 }
 
