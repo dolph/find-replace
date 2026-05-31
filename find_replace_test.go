@@ -660,6 +660,29 @@ func withWorkingDir(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 }
 
+
+func TestHandleFileSkipsGitWorktreeFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".git")
+	const original = "gitdir: /path/to/main/.git/worktrees/foo\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := newFileOrFatal(t, path)
+
+	fr := findReplace{find: "git", replace: "got"}
+	if err := fr.HandleFile(f); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("content = %q; want unchanged worktree .git file", got)
+	}
+}
+
 func CloneRepoToTestDir(b *testing.B, repoUrl string) *File {
 	b.Helper()
 	d := newTestDir(b, "", "*")

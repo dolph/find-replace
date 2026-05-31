@@ -151,6 +151,11 @@ func (fr *findReplace) WalkDir(f *File) {
 // the rename step; the failure is returned so the walker can log it and
 // continue with siblings.
 func (fr *findReplace) HandleFile(f *File) error {
+	if f.Base() == ".git" {
+		// Skip .git whether it is a directory or a worktree/submodule pointer file.
+		return nil
+	}
+
 	info, err := f.Info()
 	if err != nil {
 		return err
@@ -158,10 +163,6 @@ func (fr *findReplace) HandleFile(f *File) error {
 
 	// If file is a directory, recurse immediately (depth-first).
 	if info.IsDir() {
-		// Ignore certain directories
-		if f.Base() == ".git" {
-			return nil
-		}
 		fr.WalkDir(f)
 	} else {
 		// Replace the contents of regular files.
