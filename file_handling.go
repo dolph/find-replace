@@ -88,24 +88,55 @@ func (f *File) Read() (string, error) {
 	return builder.String(), nil
 }
 
+// tempFilePrefix is the prefix used for the atomic-rewrite temp file
+// created in the target's directory. The leading dot keeps the file hidden
+// from `ls`, and the shared prefix gives a future "skip orphan temp files
+// on a subsequent walk" pass (issue #21) a stable glob to filter on.
+const tempFilePrefix = ".find-replace."
+
 // Write atomically replaces the file with content, via a temp file + rename.
+//
+// The temp file is created with os.CreateTemp, which opens with
+// O_RDWR|O_CREATE|O_EXCL|0600 and a CSPRNG-quality random suffix. The
+// combination defends against the symlink/race attack in issue #3: a
+// co-resident attacker cannot predict the name, and even if they could,
+// O_EXCL would refuse to clobber an attacker-pre-created path (which
+// os.WriteFile + O_CREATE used to silently follow as a symlink).
+//
 // A deferred os.Remove(tempName) ensures the temp file is cleaned up if any
-// step after its creation fails (including the rename); on success the remove
-// is a no-op because the file has already been renamed away.
+// step after its creation fails (including the rename); on success the
+// remove is a no-op because the file has already been renamed away.
 func (f *File) Write(content string) error {
 	mode, err := f.Mode()
 	if err != nil {
 		return err
 	}
 
-	tempName := filepath.Join(f.Dir(), RandomString(20))
-	if err := os.WriteFile(tempName, []byte(content), mode); err != nil {
+	tmp, err := os.CreateTemp(f.Dir(), tempFilePrefix+"*")
+	if err != nil {
 		return fmt.Errorf("create tempfile in %v: %w", f.Dir(), err)
 	}
-	// Make sure the temp file is removed if the rename below fails. On
+	tempName := tmp.Name()
+	// Make sure the temp file is removed if any step below fails. On
 	// success, the rename has already moved the file to f.Path so this is
 	// a no-op (we deliberately ignore the not-exist error).
 	defer os.Remove(tempName)
+
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write tempfile %v: %w", tempName, err)
+	}
+	// Preserve the original file's permission bits. os.CreateTemp creates
+	// the file 0600; without this Chmod the rewrite would silently downgrade
+	// permissions. Setuid/setgid/sticky bits are intentionally NOT preserved
+	// in this PR — see issue #18 for the separate threat model.
+	if err := tmp.Chmod(mode.Perm()); err != nil {
+		tmp.Close()
+		return fmt.Errorf("chmod tempfile %v: %w", tempName, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close tempfile %v: %w", tempName, err)
+	}
 
 	log.Printf("Rewriting %v", f.Path)
 	if err := os.Rename(tempName, f.Path); err != nil {
