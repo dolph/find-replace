@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -125,6 +126,16 @@ func (fr *findReplace) WalkDir(f *File) {
 
 	for _, file := range files {
 		childPath := filepath.Join(f.Path, file.Name())
+		// Skip symbolic links by default. os.Stat (used downstream by
+		// File.Info) silently follows symlinks, which would let a link
+		// inside the working tree escape the search root and rewrite
+		// arbitrary files elsewhere on the filesystem (see issue #2).
+		// fs.DirEntry.Type() reports the symlink bit directly from the
+		// readdir call, so we don't need an extra lstat here.
+		if file.Type()&fs.ModeSymlink != 0 {
+			log.Printf("Skipping symlink: %v", childPath)
+			continue
+		}
 		childFile, err := NewFile(childPath)
 		if err != nil {
 			log.Print(err)
