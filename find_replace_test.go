@@ -698,7 +698,10 @@ func BenchmarkNova(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer()
 		d := CloneRepoToTestDir(b, "git@github.com:openstack/nova.git")
-		fr := findReplace{find: RandomString(2), replace: RandomString(2)}
+		// A fixed find/replace pair keeps the benchmark reproducible; the
+		// historical use of random two-character strings here did not
+		// meaningfully exercise different code paths.
+		fr := findReplace{find: "fo", replace: "ba"}
 		b.StartTimer()
 		fr.WalkDir(d)
 	}
