@@ -1,0 +1,9 @@
+version: "2"
+
+linters:
+  exclusions:
+    # golangci-lint v1 ignored unchecked errors from Close, Flush,
+    # os.Remove(All), fmt.Fprint* and friends by default. v2 dropped that
+    # default; this preset restores it.
+    presets:
+      - std-error-handling
